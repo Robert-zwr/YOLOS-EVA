@@ -54,10 +54,41 @@ class Detector(nn.Module):
         # import pdb;pdb.set_trace()
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
-        x = self.backbone(samples.tensors)
+        x = self.backbone(samples.tensors) # torch.Size([2, 100, 192])
         # x = x[:, 1:,:]
-        outputs_class = self.class_embed(x)
-        outputs_coord = self.bbox_embed(x).sigmoid()
+        outputs_class = self.class_embed(x) # torch.Size([2, 100, 92])
+        outputs_coord = self.bbox_embed(x).sigmoid() # torch.Size([2, 100, 4])
+        out = {'pred_logits': outputs_class, 'pred_boxes': outputs_coord}
+        return out
+
+    def forward_return_attention(self, samples: NestedTensor):
+        if isinstance(samples, (list, torch.Tensor)):
+            samples = nested_tensor_from_tensor_list(samples)
+        attention = self.backbone(samples.tensors, return_attention=True)
+        return attention
+    
+class EVA_Detector(nn.Module):
+    def __init__(self, num_classes, pre_trained=None, det_token_num=100, backbone_name='base', init_pe_size=[800,1344], mid_pe_size=None, use_checkpoint=False):
+        super().__init__()
+
+        if backbone_name == 'base':
+            self.backbone, hidden_dim = eva_base(pretrained=pre_trained)
+        else:
+            raise ValueError(f'backbone {backbone_name} not supported')
+        
+        self.backbone.finetune_det(det_token_num=det_token_num, img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint)
+        
+        self.class_embed = MLP(hidden_dim, hidden_dim, num_classes + 1, 3)
+        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+    
+    def forward(self, samples: NestedTensor):
+        # import pdb;pdb.set_trace()
+        if isinstance(samples, (list, torch.Tensor)):
+            samples = nested_tensor_from_tensor_list(samples)
+        x = self.backbone(samples.tensors) # torch.Size([2, 100, 192])
+        # x = x[:, 1:,:]
+        outputs_class = self.class_embed(x) # torch.Size([2, 100, 92])
+        outputs_coord = self.bbox_embed(x).sigmoid() # torch.Size([2, 100, 4])
         out = {'pred_logits': outputs_class, 'pred_boxes': outputs_coord}
         return out
 
@@ -291,16 +322,28 @@ def build(args):
     device = torch.device(args.device)
 
     # import pdb;pdb.set_trace()
-    model = Detector(
-        num_classes=num_classes,
-        pre_trained=args.pre_trained,
-        det_token_num=args.det_token_num,
-        backbone_name=args.backbone_name,
-        init_pe_size=args.init_pe_size,
-        mid_pe_size=args.mid_pe_size,
-        use_checkpoint=args.use_checkpoint,
-
-    )
+    if args.model_name == 'yolos':
+        model = Detector(
+            num_classes=num_classes,
+            pre_trained=args.pre_trained,
+            det_token_num=args.det_token_num,
+            backbone_name=args.backbone_name,
+            init_pe_size=args.init_pe_size,
+            mid_pe_size=args.mid_pe_size,
+            use_checkpoint=args.use_checkpoint,
+        )
+    elif args.model_name == 'eva':
+        model = EVA_Detector(
+            num_classes=num_classes,
+            pre_trained=args.pre_trained,
+            det_token_num=args.det_token_num,
+            backbone_name=args.backbone_name,
+            init_pe_size=args.init_pe_size,
+            mid_pe_size=args.mid_pe_size,
+            use_checkpoint=args.use_checkpoint,
+        )
+    else:
+        raise ValueError(f'model {args.model_name} not supported')
     matcher = build_matcher(args)
     weight_dict = {'loss_ce': 1, 'loss_bbox': args.bbox_loss_coef}
     weight_dict['loss_giou'] = args.giou_loss_coef

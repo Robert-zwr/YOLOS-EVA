@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from functools import partial
 from .layers import DropPath, to_2tuple, trunc_normal_
+from .eva_vit_model import EVAVisionTransformer
 import torch.utils.checkpoint as checkpoint 
 
 class Mlp(nn.Module):
@@ -300,7 +301,7 @@ class VisionTransformer(nn.Module):
         # if (H,W) != self.img_size:
         #     self.finetune = True
 
-        x = self.patch_embed(x)
+        x = self.patch_embed(x) # torch.Size([2, n_patch, embed_dim])
         # interpolate init pe
         if (self.pos_embed.shape[1] - 1 - self.det_token_num) != x.shape[1]:
             temp_pos_embed = self.InterpolateInitPosEmbed(self.pos_embed, img_size=(H,W))
@@ -441,6 +442,20 @@ def small_dWr(pretrained=None, **kwargs):
 
 def base(pretrained=None, **kwargs):
     model = VisionTransformer(
+        img_size=384, patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),is_distill=True, **kwargs)
+    if pretrained:
+        # checkpoint = torch.load('deit_base_distilled_patch16_384-d0272ac0.pth', map_location="cpu")
+        # checkpoint = torch.hub.load_state_dict_from_url(
+        #     url="https://dl.fbaipublicfiles.com/deit/deit_base_distilled_patch16_384-d0272ac0.pth",
+        #     map_location="cpu", check_hash=True
+        # )
+        checkpoint = torch.load(pretrained, map_location="cpu")
+        model.load_state_dict(checkpoint["model"], strict=False)
+    return model, 768
+
+def eva_base(pretrained=None, **kwargs):
+    model = EVAVisionTransformer(
         img_size=384, patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6),is_distill=True, **kwargs)
     if pretrained:

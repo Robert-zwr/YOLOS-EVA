@@ -27,7 +27,8 @@ def get_args_parser():
     parser.add_argument('--batch_size', default=2, type=int)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
     parser.add_argument('--epochs', default=150, type=int)
-    parser.add_argument('--eval_size', default=800, type=int)
+    parser.add_argument('--eval_size', default=800, type=int,
+                        help='image size for evaluation')
     
     parser.add_argument('--clip_max_norm', default=0.1, type=float,
                         help='gradient clipping max norm')
@@ -60,6 +61,8 @@ def get_args_parser():
     # * model setting
     parser.add_argument("--det_token_num", default=100, type=int,
                         help="Number of det token in the deit backbone")
+    parser.add_argument('--model_name', default='yolos', type=str,
+                        help="Name of the model to use (yolos/eva)")
     parser.add_argument('--backbone_name', default='tiny', type=str,
                         help="Name of the deit backbone to use")
     parser.add_argument('--pre_trained', default='',
