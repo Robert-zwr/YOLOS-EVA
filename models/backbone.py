@@ -456,8 +456,9 @@ def base(pretrained=None, **kwargs):
 
 def eva_base(pretrained=None, **kwargs):
     model = EVAVisionTransformer(
-        img_size=384, patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6),is_distill=True, **kwargs)
+        img_size=224, patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=2.6667, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), use_mean_pooling=False, xattn=True, intp_freq=True, naiveswiglu=True, 
+        subln=True, rope=True, is_distill=True, **kwargs)
     if pretrained:
         # checkpoint = torch.load('deit_base_distilled_patch16_384-d0272ac0.pth', map_location="cpu")
         # checkpoint = torch.hub.load_state_dict_from_url(
@@ -465,5 +466,8 @@ def eva_base(pretrained=None, **kwargs):
         #     map_location="cpu", check_hash=True
         # )
         checkpoint = torch.load(pretrained, map_location="cpu")
-        model.load_state_dict(checkpoint["model"], strict=False)
+        for k in list(checkpoint.keys()):
+            if 'rope' in k:
+                del checkpoint[k]
+        model.load_state_dict(checkpoint, strict=False)
     return model, 768

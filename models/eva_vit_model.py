@@ -144,6 +144,34 @@ class SwiGLU(nn.Module):
         x = self.drop(x)
         return x
 
+
+def memory_efficient_attention_pytorch(query, key, value, attn_bias=None, p=0., scale=None):
+    # query     [batch, seq_len, n_head, head_dim]
+    # key       [batch, seq_len, n_head, head_dim]
+    # value     [batch, seq_len, n_head, head_dim]
+    # attn_bias [batch, n_head, seq_len, seq_len]
+
+    if scale is None:
+        scale = 1 / query.shape[-1] ** 0.5
+    
+    # BLHC -> BHLC
+    query = query.transpose(1, 2)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
+
+    query = query * scale
+    # BHLC @ BHCL -> BHLL
+    attn = query @ key.transpose(-2, -1)
+    if attn_bias is not None:
+        attn = attn + attn_bias
+    attn = attn.softmax(-1)
+    attn = F.dropout(attn, p)
+    # BHLL @ BHLC -> BHLC
+    out = attn @ value
+    # BHLC -> BLHC
+    out = out.transpose(1, 2)
+    return out
+
 class Attention(nn.Module):
     def __init__(
             self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.,
@@ -211,33 +239,6 @@ class Attention(nn.Module):
 
         self.rope = rope
 
-    def memory_efficient_attention_pytorch(query, key, value, attn_bias=None, p=0., scale=None):
-        # query     [batch, seq_len, n_head, head_dim]
-        # key       [batch, seq_len, n_head, head_dim]
-        # value     [batch, seq_len, n_head, head_dim]
-        # attn_bias [batch, n_head, seq_len, seq_len]
-
-        if scale is None:
-            scale = 1 / query.shape[-1] ** 0.5
-    
-        # BLHC -> BHLC
-        query = query.transpose(1, 2)
-        key = key.transpose(1, 2)
-        value = value.transpose(1, 2)
-
-        query = query * scale
-        # BHLC @ BHCL -> BHLL
-        attn = query @ key.transpose(-2, -1)
-        if attn_bias is not None:
-            attn = attn + attn_bias
-        attn = attn.softmax(-1)
-        attn = F.dropout(attn, p)
-        # BHLL @ BHLC -> BHLC
-        out = attn @ value
-        # BHLC -> BLHC
-        out = out.transpose(1, 2)
-        return out
-
     def forward(self, x, rel_pos_bias=None, attn_mask=None):
         B, N, C = x.shape
         if self.subln: 
@@ -260,14 +261,15 @@ class Attention(nn.Module):
             q, k, v = qkv[0], qkv[1], qkv[2]
 
         if self.rope:
+            num_det_tokens = 100
             # slightly fast impl
-            q_t = q[:, :, 1:, :]
+            q_t = q[:, :, 1:-num_det_tokens, :]
             ro_q_t = self.rope(q_t)
-            q = torch.cat((q[:, :, :1, :], ro_q_t), -2).type_as(v)
+            q = torch.cat((q[:, :, :1, :], ro_q_t, q[:, :, -num_det_tokens:, :]), -2).type_as(v)
 
-            k_t = k[:, :, 1:, :]
+            k_t = k[:, :, 1:-num_det_tokens, :]
             ro_k_t = self.rope(k_t)
-            k = torch.cat((k[:, :, :1, :], ro_k_t), -2).type_as(v)
+            k = torch.cat((k[:, :, :1, :], ro_k_t, k[:, :, -num_det_tokens:, :]), -2).type_as(v)
 
         if self.xattn:
             q = q.permute(0, 2, 1, 3)   # B, num_heads, N, C -> B, N, num_heads, C
@@ -279,8 +281,8 @@ class Attention(nn.Module):
             #    p=self.xattn_drop,
             #    scale=self.scale,
             #    )
-            x = self.memory_efficient_attention_pytorch(q, k, v, p=self.xattn_drop, scale=self.scale)
-            
+            x = memory_efficient_attention_pytorch(q, k, v, p=self.xattn_drop, scale=self.scale)
+
             x = x.reshape(B, N, -1)
             x = self.inner_attn_ln(x)
             x = self.proj(x)
@@ -442,14 +444,19 @@ class EVAVisionTransformer(nn.Module):
                  drop_path_rate=0., norm_layer=nn.LayerNorm, init_values=None, patch_dropout=0.,
                  use_abs_pos_emb=True, use_rel_pos_bias=False, use_shared_rel_pos_bias=False, rope=False,
                  use_mean_pooling=True, init_scale=0.001, grad_checkpointing=False, xattn=False, postnorm=False,
-                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False):
+                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False, is_distill=True):
         super().__init__()
-        self.image_size = img_size
+        #self.img_size = img_size
+        if isinstance(img_size,tuple):
+            self.img_size = img_size
+        else:
+            self.img_size = to_2tuple(img_size)
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
 
         self.patch_embed = PatchEmbed(
             img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
+        self.patch_size = patch_size
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -580,9 +587,19 @@ class EVAVisionTransformer(nn.Module):
         patch_pos_embed = patch_pos_embed.view(B, E, P_H, P_W)
         H, W = img_size
         new_P_H, new_P_W = H//self.patch_size, W//self.patch_size
+        # torch.Size([1, 768, 50, 84])
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
-        patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
+        patch_pos_embed = patch_pos_embed.flatten(2).transpose(1,2) # torch.Size([1, 4200, 768])
         self.pos_embed = torch.nn.Parameter(torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1))
+
+        _, head_dim = self.rope.freqs_cos.shape
+        freqs_cos = self.rope.freqs_cos.transpose(0,1).view(B, head_dim, P_H, P_W)
+        freqs_sin = self.rope.freqs_sin.transpose(0,1).view(B, head_dim, P_H, P_W)
+        freqs_cos = nn.functional.interpolate(freqs_cos, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False) #torch.Size([1, 64, 50, 84])
+        freqs_sin = nn.functional.interpolate(freqs_sin, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
+        self.freqs_cos = nn.Parameter(freqs_cos.squeeze().flatten(1).transpose(0,1))
+        self.freqs_sin = nn.Parameter(freqs_sin.squeeze().flatten(1).transpose(0,1))
+
         self.img_size = img_size
         if mid_pe_size == None:
             self.has_mid_pe = False
@@ -597,16 +614,22 @@ class EVAVisionTransformer(nn.Module):
 
     def InterpolateInitPosEmbed(self, pos_embed, img_size=(800, 1344)):
         # import pdb;pdb.set_trace()
+        _, head_dim = self.rope.freqs_cos.shape
+
         cls_pos_embed = pos_embed[:, 0, :]
         cls_pos_embed = cls_pos_embed[:,None]
         det_pos_embed = pos_embed[:, -self.det_token_num:,:]
-        patch_pos_embed = pos_embed[:, 1:-self.det_token_num, :]
+        patch_pos_embed = pos_embed[:, 1:-self.det_token_num, :] # [1,4200,768]
         patch_pos_embed = patch_pos_embed.transpose(1,2)
+        freqs_cos = self.freqs_cos.transpose(0,1)
+        freqs_sin = self.freqs_sin.transpose(0,1)
         B, E, Q = patch_pos_embed.shape
 
 
         P_H, P_W = self.img_size[0] // self.patch_size, self.img_size[1] // self.patch_size
         patch_pos_embed = patch_pos_embed.view(B, E, P_H, P_W)
+        freqs_cos = freqs_cos.view(B, head_dim, P_H, P_W)
+        freqs_sin = freqs_sin.view(B, head_dim, P_H, P_W)
 
         # P_H, P_W = self.img_size[0] // self.patch_size, self.img_size[1] // self.patch_size
         # patch_pos_embed = patch_pos_embed.view(B, E, P_H, P_W)
@@ -616,6 +639,12 @@ class EVAVisionTransformer(nn.Module):
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
         scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1)
+
+        freqs_cos = nn.functional.interpolate(freqs_cos, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
+        freqs_sin = nn.functional.interpolate(freqs_sin, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
+        self.rope.freqs_cos = freqs_cos.squeeze().flatten(1).transpose(0,1)
+        self.rope.freqs_sin = freqs_sin.squeeze().flatten(1).transpose(0,1)
+        
         return scale_pos_embed
     
     def forward_features(self, x, return_all_features=False):
@@ -630,6 +659,8 @@ class EVAVisionTransformer(nn.Module):
             temp_pos_embed = self.InterpolateInitPosEmbed(self.pos_embed, img_size=(H,W))
         else:
             temp_pos_embed = self.pos_embed
+            self.rope.freqs_cos = self.freqs_cos
+            self.rope.freqs_sin = self.freqs_sin
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         det_token = self.det_token.expand(B, -1, -1)
