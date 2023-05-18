@@ -71,7 +71,9 @@ class EVA_Detector(nn.Module):
     def __init__(self, num_classes, pre_trained=None, det_token_num=100, backbone_name='base', init_pe_size=[800,1344], mid_pe_size=None, use_checkpoint=False):
         super().__init__()
 
-        if backbone_name == 'base':
+        if backbone_name == 'tiny':
+            self.backbone, hidden_dim = eva_tiny(pretrained=pre_trained)
+        elif backbone_name == 'base':
             self.backbone, hidden_dim = eva_base(pretrained=pre_trained)
         else:
             raise ValueError(f'backbone {backbone_name} not supported')

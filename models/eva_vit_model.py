@@ -155,9 +155,9 @@ def memory_efficient_attention_pytorch(query, key, value, attn_bias=None, p=0., 
         scale = 1 / query.shape[-1] ** 0.5
     
     # BLHC -> BHLC
-    query = query.transpose(1, 2)
-    key = key.transpose(1, 2)
-    value = value.transpose(1, 2)
+    #query = query.transpose(1, 2)
+    #key = key.transpose(1, 2)
+    #value = value.transpose(1, 2)
 
     query = query * scale
     # BHLC @ BHCL -> BHLL
@@ -272,9 +272,9 @@ class Attention(nn.Module):
             k = torch.cat((k[:, :, :1, :], ro_k_t, k[:, :, -num_det_tokens:, :]), -2).type_as(v)
 
         if self.xattn:
-            q = q.permute(0, 2, 1, 3)   # B, num_heads, N, C -> B, N, num_heads, C
-            k = k.permute(0, 2, 1, 3)
-            v = v.permute(0, 2, 1, 3)
+            #q = q.permute(0, 2, 1, 3)   # B, num_heads, N, C -> B, N, num_heads, C
+            #k = k.permute(0, 2, 1, 3)
+            #v = v.permute(0, 2, 1, 3)
 
             #x = xops.memory_efficient_attention(
             #    q, k, v,
@@ -444,7 +444,7 @@ class EVAVisionTransformer(nn.Module):
                  drop_path_rate=0., norm_layer=nn.LayerNorm, init_values=None, patch_dropout=0.,
                  use_abs_pos_emb=True, use_rel_pos_bias=False, use_shared_rel_pos_bias=False, rope=False,
                  use_mean_pooling=True, init_scale=0.001, grad_checkpointing=False, xattn=False, postnorm=False,
-                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False, is_distill=True):
+                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False):
         super().__init__()
         #self.img_size = img_size
         if isinstance(img_size,tuple):
@@ -597,8 +597,10 @@ class EVAVisionTransformer(nn.Module):
         freqs_sin = self.rope.freqs_sin.transpose(0,1).view(B, head_dim, P_H, P_W)
         freqs_cos = nn.functional.interpolate(freqs_cos, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False) #torch.Size([1, 64, 50, 84])
         freqs_sin = nn.functional.interpolate(freqs_sin, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
-        self.freqs_cos = nn.Parameter(freqs_cos.squeeze().flatten(1).transpose(0,1))
-        self.freqs_sin = nn.Parameter(freqs_sin.squeeze().flatten(1).transpose(0,1))
+        self.register_buffer("freqs_cos", freqs_cos.squeeze().flatten(1).transpose(0,1))
+        self.register_buffer("freqs_sin", freqs_sin.squeeze().flatten(1).transpose(0,1))
+        #self.freqs_cos = nn.Parameter(freqs_cos.squeeze().flatten(1).transpose(0,1))
+        #self.freqs_sin = nn.Parameter(freqs_sin.squeeze().flatten(1).transpose(0,1))
 
         self.img_size = img_size
         if mid_pe_size == None:
@@ -693,7 +695,7 @@ class EVAVisionTransformer(nn.Module):
             if self.fc_norm is not None:
                 return self.fc_norm(x.mean(1))
             else:
-                return x[:, -self.det_token_num:, :]  # torch.Size([1, 768])
+                return x[:, -self.det_token_num:, :]  # torch.Size([1, 100, 768])
         return x
 
     def forward(self, x, return_all_features=False):
