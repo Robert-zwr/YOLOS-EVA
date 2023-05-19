@@ -458,7 +458,7 @@ def base(pretrained=None, **kwargs):
 def eva_tiny(pretrained=None, **kwargs):
     model = EVAVisionTransformer(
         img_size=336, patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=2.6667, qkv_bias=True,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6), xattn=True, intp_freq=True, pt_hw_seq_len=16, 
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), use_mean_pooling=False, xattn=True, intp_freq=True, pt_hw_seq_len=16, 
         naiveswiglu=True, rope=True, **kwargs)
     if pretrained:
         # checkpoint = torch.load('deit_base_distilled_patch16_384-d0272ac0.pth', map_location="cpu")
