@@ -16,6 +16,6 @@ not_tracked_dir/
 output/
 .vscode
 .github
-./coco
-./checkpoints
-./VOC2017
+coco
+checkpoints
+VOC2017
