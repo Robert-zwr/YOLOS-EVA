@@ -182,8 +182,8 @@ def parseXmlFiles_by_txt(data_dir,json_save_path,split='train'):
 if __name__ == '__main__':
     #通过txt文件生成
     voc_data_dir="/mnt/data01/zwr/VOCdevkit/VOC2007"
-    #json_save_path="/mnt/data01/zwr/VOC2017/annotations/voc_train.json"
-    #parseXmlFiles_by_txt(voc_data_dir,json_save_path,"trainval")
+    json_save_path="/mnt/data01/zwr/VOC2007/annotations/voc_train.json"
+    parseXmlFiles_by_txt(voc_data_dir,json_save_path,"trainval")
 
-    json_save_path="/mnt/data01/zwr/VOC2017/annotations/voc_val.json"
-    parseXmlFiles_by_txt(voc_data_dir,json_save_path,"test")
+    #json_save_path="/mnt/data01/zwr/VOC2007/annotations/voc_val.json"
+    #parseXmlFiles_by_txt(voc_data_dir,json_save_path,"test")
