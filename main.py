@@ -4,12 +4,13 @@ import datetime
 import json
 import random
 import time
+import os
 from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
-# os.environ['CUDA_VISIBLE_DEVICES']='0,1,2'
+os.environ['CUDA_VISIBLE_DEVICES']='1,2,3'
 
 import datasets
 import util.misc as utils
