@@ -28,7 +28,7 @@ This project applies the YOLOS method to EVA-02 models and evaluates their perfo
 - For EVA models, We interpolate the kernel size of `patch_embed` from `14x14` to `16x16`. This is useful for object detection, instance segmentation & semantic segmentation tasks.
 - The comparison of these results may not be fair, as the EVA model uses more data during the pre-training process(IN-21K).
 
-### Requirement
+## Requirement
 
 Please reference to Requirement of YOLOS [here](https://github.com/hustvl/YOLOS#requirement) to build the environment.
 
@@ -40,7 +40,7 @@ pip install timm einops
 
 
 
-### Data preparation
+## Data preparation
 
 We use VOC2007 trainval to train and VOC2007 test to eval.
 
@@ -77,7 +77,7 @@ path/to/dataset/
   	val/	# VOC 2007 test images
 ```
 
-### Training
+## Training
 
 Before finetuning on VOC2007, you need download the pre-trained model.
 
@@ -113,7 +113,7 @@ python -m torch.distributed.launch --nproc_per_node=3 --use_env main.py --coco_p
 </details>
 
 
-### Evaluation
+## Evaluation
 
 To evaluate `VOC-YOLOS-Ti` model on VOC2007 test, run:
 
