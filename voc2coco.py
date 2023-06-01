@@ -1,82 +1,18 @@
+import argparse
 import xml.etree.ElementTree as ET
 import os
 import json
- 
-coco = dict()
-coco['images'] = []
-coco['type'] = 'instances'
-coco['annotations'] = []
-coco['categories'] = []
- 
-#category_set = dict()
-category_set = {'aeroplane': 1, 'bicycle': 2, 'bird': 3, 'boat': 4, 'bottle': 5, 'bus': 6, 'car': 7, 'cat': 8, 'chair': 9, 'cow': 10,
-                'diningtable': 11, 'dog': 12, 'horse': 13, 'motorbike': 14, 'person': 15, 'pottedplant': 16, 'sheep': 17, 'sofa': 18,
-                'train': 19, 'tvmonitor': 20}
-image_set = set()
- 
+
+
 #category_item_id = 0
 image_id = 20180000000
 annotation_id = 0
- 
-def addCatItem():
-    #global category_item_id
-    for k, v in category_set.items():
-        category_item = dict()
-        category_item['supercategory'] = 'none'
-        category_item_id = v
-        category_item['id'] = category_item_id
-        category_item['name'] = k
-        coco['categories'].append(category_item)
 
- 
-def addImgItem(file_name, size):
-    global image_id
-    if file_name is None:
-        raise Exception('Could not find filename tag in xml file.')
-    if size['width'] is None:
-        raise Exception('Could not find width tag in xml file.')
-    if size['height'] is None:
-        raise Exception('Could not find height tag in xml file.')
-    image_id += 1
-    image_item = dict()
-    image_item['id'] = image_id
-    image_item['file_name'] = file_name
-    image_item['width'] = size['width']
-    image_item['height'] = size['height']
-    coco['images'].append(image_item)
-    image_set.add(file_name)
-    return image_id
- 
-def addAnnoItem(object_name, image_id, category_id, bbox):
-    global annotation_id
-    annotation_item = dict()
-    annotation_item['segmentation'] = []
-    seg = []
-    # bbox[] is x,y,w,h
-    # left_top
-    seg.append(bbox[0])
-    seg.append(bbox[1])
-    # left_bottom
-    seg.append(bbox[0])
-    seg.append(bbox[1] + bbox[3])
-    # right_bottom
-    seg.append(bbox[0] + bbox[2])
-    seg.append(bbox[1] + bbox[3])
-    # right_top
-    seg.append(bbox[0] + bbox[2])
-    seg.append(bbox[1])
- 
-    annotation_item['segmentation'].append(seg)
- 
-    annotation_item['area'] = bbox[2] * bbox[3]
-    annotation_item['iscrowd'] = 0
-    annotation_item['ignore'] = 0
-    annotation_item['image_id'] = image_id
-    annotation_item['bbox'] = bbox
-    annotation_item['category_id'] = category_id
-    annotation_id += 1
-    annotation_item['id'] = annotation_id
-    coco['annotations'].append(annotation_item)
+def get_args_parser():
+    parser = argparse.ArgumentParser('Set data dir', add_help=False)
+    parser.add_argument('voc_data_dir', type=str)
+
+    return parser
  
 def _read_image_ids(image_sets_file):
     ids = []
@@ -85,10 +21,80 @@ def _read_image_ids(image_sets_file):
             ids.append(line.rstrip())
     return ids
  
-"""通过txt文件生成"""
 #split ='train' 'va' 'trainval' 'test'
 def parseXmlFiles_by_txt(data_dir,json_save_path,split='train'):
-    print("hello")
+    coco = dict()
+    coco['images'] = []
+    coco['type'] = 'instances'
+    coco['annotations'] = []
+    coco['categories'] = []
+
+    #category_set = dict()
+    category_set = {'aeroplane': 1, 'bicycle': 2, 'bird': 3, 'boat': 4, 'bottle': 5, 'bus': 6, 'car': 7, 'cat': 8, 'chair': 9, 'cow': 10,
+                'diningtable': 11, 'dog': 12, 'horse': 13, 'motorbike': 14, 'person': 15, 'pottedplant': 16, 'sheep': 17, 'sofa': 18,
+                'train': 19, 'tvmonitor': 20}
+    image_set = set()
+
+    def addCatItem():
+        #global category_item_id
+        for k, v in category_set.items():
+            category_item = dict()
+            category_item['supercategory'] = 'none'
+            category_item_id = v
+            category_item['id'] = category_item_id
+            category_item['name'] = k
+            coco['categories'].append(category_item)
+
+    def addImgItem(file_name, size):
+        global image_id
+        if file_name is None:
+            raise Exception('Could not find filename tag in xml file.')
+        if size['width'] is None:
+            raise Exception('Could not find width tag in xml file.')
+        if size['height'] is None:
+            raise Exception('Could not find height tag in xml file.')
+        image_id += 1
+        image_item = dict()
+        image_item['id'] = image_id
+        image_item['file_name'] = file_name
+        image_item['width'] = size['width']
+        image_item['height'] = size['height']
+        coco['images'].append(image_item)
+        image_set.add(file_name)
+        return image_id
+ 
+    def addAnnoItem(object_name, image_id, category_id, bbox):
+        global annotation_id
+        annotation_item = dict()
+        annotation_item['segmentation'] = []
+        seg = []
+        # bbox[] is x,y,w,h
+        # left_top
+        seg.append(bbox[0])
+        seg.append(bbox[1])
+        # left_bottom
+        seg.append(bbox[0])
+        seg.append(bbox[1] + bbox[3])
+        # right_bottom
+        seg.append(bbox[0] + bbox[2])
+        seg.append(bbox[1] + bbox[3])
+        # right_top
+        seg.append(bbox[0] + bbox[2])
+        seg.append(bbox[1])
+ 
+        annotation_item['segmentation'].append(seg)
+ 
+        annotation_item['area'] = bbox[2] * bbox[3]
+        annotation_item['iscrowd'] = 0
+        annotation_item['ignore'] = 0
+        annotation_item['image_id'] = image_id
+        annotation_item['bbox'] = bbox
+        annotation_item['category_id'] = category_id
+        annotation_id += 1
+        annotation_item['id'] = annotation_id
+        coco['annotations'].append(annotation_item)
+
+
     addCatItem()
     labelfile=split+".txt"
     image_sets_file = data_dir + "/ImageSets/Main/"+labelfile
@@ -180,10 +186,15 @@ def parseXmlFiles_by_txt(data_dir,json_save_path,split='train'):
  
  
 if __name__ == '__main__':
-    #通过txt文件生成
-    voc_data_dir="/mnt/data01/zwr/VOCdevkit/VOC2007"
-    json_save_path="/mnt/data01/zwr/VOC2007/annotations/voc_train.json"
+    parser = argparse.ArgumentParser('Convert VOC2007 annotations to COCO format json file script', parents=[get_args_parser()])
+    args = parser.parse_args()
+
+    voc_data_dir = args.voc_data_dir + "/VOC2007"
+    json_save_path="./voc_train.json"
     parseXmlFiles_by_txt(voc_data_dir,json_save_path,"trainval")
 
-    #json_save_path="/mnt/data01/zwr/VOC2007/annotations/voc_val.json"
-    #parseXmlFiles_by_txt(voc_data_dir,json_save_path,"test")
+    image_id = 20180000000
+    annotation_id = 0
+
+    json_save_path="./voc_val.json"
+    parseXmlFiles_by_txt(voc_data_dir,json_save_path,"test")
