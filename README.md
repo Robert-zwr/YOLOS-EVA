@@ -15,7 +15,7 @@ This project applies the YOLOS method to EVA-02 models and evaluates their perfo
 
 ## Results
 
-|Model |Params |Pre-train Epochs |  Init Weight | Fine-tune Epochs | Eval Size | YOLOS Checkpoint / Log | AP @ COCO val |
+|Model |Params |Pre-train Epochs |  Init Weight | Fine-tune Epochs | Eval Size | YOLOS Checkpoint / Log | AP @ VOC2007 test |
 | :------------: | :------------: | :------------: | :------------: | :------------: | :------------: | :------------: |:------------: |
 |`VOC-YOLOS-Ti`|6M|300|[DeiT-tiny](https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth)|300|512|[checkpoint](https://huggingface.co/Robert-zwr/EVA-YOLOS/resolve/main/checkpoints/voc_yolos_ti.pth) / [Log](https://gist.github.com/Robert-zwr/c011a5b0ba5fc71e6f09abdf8cc84efc)|23.9
 |`VOC-YOLOS-S`|22M|300|[DeiT-small](https://dl.fbaipublicfiles.com/deit/deit_small_patch16_224-cd65a155.pth)|150|512|[checkpoint](https://huggingface.co/Robert-zwr/EVA-YOLOS/resolve/main/checkpoints/voc_yolos_s.pth) / [Log](https://gist.github.com/Robert-zwr/3a12a61886b53c3e51e47bb1d00b0d53)|31.1
