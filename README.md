@@ -82,7 +82,7 @@ path/to/dataset/
 Before finetuning on VOC2007, you need download the pre-trained model.
 
 <details>
-<summary>To train the original <code>VOC-YOLOS-Ti</code> model on VOC, run this command:</summary>
+<summary>To train the original <code>VOC-YOLOS-Ti</code> model on VOC2007, run this command:</summary>
 <pre><code>
 python -m torch.distributed.launch --nproc_per_node=3 --use_env main.py --coco_path /path/to/dataset --dataset_file voc --batch_size 2 --lr 2.5e-5 --epochs 300 --backbone_name tiny --pre_trained path/to/deit-tiny.pth --eval_size 512 --init_pe_size 608 800 --output_dir /output/path/box_model
 </code></pre>
@@ -90,7 +90,7 @@ python -m torch.distributed.launch --nproc_per_node=3 --use_env main.py --coco_p
 
 
 <details>
-<summary>To train the original <code>VOC-YOLOS-S</code> model on VOC, run this command:</summary>
+<summary>To train the original <code>VOC-YOLOS-S</code> model on VOC2007, run this command:</summary>
 <pre><code>
 python -m torch.distributed.launch --nproc_per_node=3 --use_env main.py --coco_path /path/to/dataset --dataset_file voc --batch_size 1 --lr 2.5e-5 --epochs 150 --backbone_name small --pre_trained path/to/deit-small-300epoch.pth --eval_size 512 --init_pe_size 512 864 --mid_pe_size 512 864 --output_dir /output/path/box_model
 </code></pre>
@@ -98,7 +98,7 @@ python -m torch.distributed.launch --nproc_per_node=3 --use_env main.py --coco_p
 
 
 <details>
-<summary>To train the <code>VOC-YOLOS-EVA-Ti</code> model on VOC, run this command:</summary>
+<summary>To train the <code>VOC-YOLOS-EVA-Ti</code> model on VOC2007, run this command:</summary>
 <pre><code>
 python -m torch.distributed.launch --nproc_per_node=3 --use_env main.py --coco_path /path/to/dataset --dataset_file voc --batch_size 2 --lr 2.5e-5 --epochs 300 --model_name eva --backbone_name tiny --pre_trained path/to/eva02_Ti_pt_in21k_ft_in1k_p14.pt --eval_size 512 --init_pe_size 608 800 --output_dir /output/path/box_model
 </code></pre>
@@ -106,7 +106,7 @@ python -m torch.distributed.launch --nproc_per_node=3 --use_env main.py --coco_p
 
 
 <details>
-<summary>To train the <code>EVA-YOLOS-EVA-S</code> model on VOC, run this command:</summary>
+<summary>To train the <code>EVA-YOLOS-EVA-S</code> model on VOC2007, run this command:</summary>
 <pre><code>
 python -m torch.distributed.launch --nproc_per_node=3 --use_env main.py --coco_path /path/to/dataset --dataset_file voc --batch_size 1 --lr 2.5e-5 --epochs 150 --model_name eva --backbone_name small --pre_trained path/to/eva02_S_pt_in21k_ft_in1k_p14.pt --eval_size 512 --init_pe_size 608 800 --output_dir /output/path/box_model
 </code></pre>
