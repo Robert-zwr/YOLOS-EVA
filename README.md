@@ -20,7 +20,7 @@ This project applies the YOLOS method to EVA-02 models and evaluates their perfo
 |`VOC-YOLOS-Ti`|6M|300|[DeiT-tiny](https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth)|300|512|[checkpoint](https://huggingface.co/Robert-zwr/EVA-YOLOS/resolve/main/checkpoints/voc_yolos_ti.pth) / [Log](https://gist.github.com/Robert-zwr/c011a5b0ba5fc71e6f09abdf8cc84efc)|23.9
 |`VOC-YOLOS-S`|22M|300|[DeiT-small](https://dl.fbaipublicfiles.com/deit/deit_small_patch16_224-cd65a155.pth)|150|512|[checkpoint](https://huggingface.co/Robert-zwr/EVA-YOLOS/resolve/main/checkpoints/voc_yolos_s.pth) / [Log](https://gist.github.com/Robert-zwr/3a12a61886b53c3e51e47bb1d00b0d53)|31.1
 |`VOC-YOLOS-EVA-Ti`|6M|240+100|[EVA02-tiny](https://huggingface.co/Yuxin-CV/EVA-02/blob/main/eva02/cls/in1k/eva02_Ti_pt_in21k_ft_in1k_p14.pt)|300|512|[checkpoint](https://huggingface.co/Robert-zwr/EVA-YOLOS/resolve/main/checkpoints/voc_yolos_eva_ti.pth) / [Log](https://gist.github.com/Robert-zwr/32ae183c4fd07244f3f7b58ee8c39903) |31.9
-|`VOC-YOLOS-EVA-S`|22M|240+100|[EVA02-small](https://huggingface.co/Yuxin-CV/EVA-02/blob/main/eva02/cls/in1k/eva02_S_pt_in21k_ft_in1k_p14.pt)|150|512|[checkpoint](https://drive.google.com/file/d/11iYWMDMwabMawqE2bxpMprUBWB6GIgiv/view?usp=drive_link) / [Log](https://gist.github.com/Robert-zwr/87b0f14c966a57a64962bf81631e7b66)|42.0
+|`VOC-YOLOS-EVA-S`|22M|240+100|[EVA02-small](https://huggingface.co/Yuxin-CV/EVA-02/blob/main/eva02/cls/in1k/eva02_S_pt_in21k_ft_in1k_p14.pt)|150|512|[checkpoint](https://huggingface.co/Robert-zwr/EVA-YOLOS/resolve/main/checkpoints/voc_yolos_eva_s.pth) / [Log](https://gist.github.com/Robert-zwr/87b0f14c966a57a64962bf81631e7b66)|42.0
 
 **Notes**: 
 
