@@ -67,6 +67,8 @@ def get_args_parser():
                         help="Name of the model to use (yolos/eva)")
     parser.add_argument('--backbone_name', default='tiny', type=str,
                         help="Name of the deit backbone to use")
+    parser.add_argument('--use_partial_finetune', action='store_true', default=False,
+                        help="whether to use partial finetuning")
     parser.add_argument('--pre_trained', default='',
                         help="set imagenet pretrained model path if not train yolos from scatch")
     parser.add_argument('--init_pe_size', nargs='+', type=int,

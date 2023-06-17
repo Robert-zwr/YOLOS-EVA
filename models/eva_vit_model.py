@@ -143,6 +143,50 @@ class SwiGLU(nn.Module):
         x = self.w3(x)
         x = self.drop(x)
         return x
+    
+class SwiGLU_sep(nn.Module):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.SiLU, drop=0., 
+                norm_layer=nn.LayerNorm, subln=False):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+
+        self.w1_patch = nn.Linear(in_features, hidden_features)
+        self.w1_det = nn.Linear(in_features, hidden_features)
+        self.w2_patch = nn.Linear(in_features, hidden_features)
+        self.w2_det = nn.Linear(in_features, hidden_features)
+
+        self.act = act_layer()
+        self.ffn_ln_patch = norm_layer(hidden_features) if subln else nn.Identity()
+        self.ffn_ln_det = norm_layer(hidden_features) if subln else nn.Identity()
+        self.w3_patch = nn.Linear(hidden_features, out_features)
+        self.w3_det = nn.Linear(hidden_features, out_features)
+        
+        self.drop = nn.Dropout(drop)
+
+        self.num_det_tokens = 100
+
+    def forward(self, x):
+        x_patch = x[:,:-self.num_det_tokens,:]
+        x_det = x[:,-self.num_det_tokens:,:]
+        # x1 = self.w1(x)
+        x1_patch = self.w1_patch(x_patch)
+        x1_det = self.w1_det(x_det)
+        # x2 = self.w2(x)
+        x2_patch = self.w2_patch(x_patch)
+        x2_det = self.w2_det(x_det)
+        # hidden = self.act(x1) * x2
+        hidden_patch = self.act(x1_patch) * x2_patch
+        hidden_det = self.act(x1_det) * x2_det
+        # x = self.ffn_ln(hidden)
+        x_patch = self.ffn_ln_patch(hidden_patch)
+        x_det = self.ffn_ln_det(hidden_det)
+        # x = self.w3(x)
+        x_patch = self.w3_patch(x_patch)
+        x_det = self.w3_det(x_det)
+        x = torch.cat((x_patch, x_det), dim=1)
+        x = self.drop(x)
+        return x
 
 
 def memory_efficient_attention_pytorch(query, key, value, attn_bias=None, p=0., scale=None):
@@ -321,7 +365,7 @@ class Block(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
                  drop_path=0., init_values=None, act_layer=nn.GELU, norm_layer=nn.LayerNorm,
                  window_size=None, attn_head_dim=None, xattn=False, rope=None, postnorm=False,
-                 subln=False, naiveswiglu=False):
+                 subln=False, naiveswiglu=False, partial_finetune=False):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
@@ -334,12 +378,20 @@ class Block(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
 
         if naiveswiglu:
-            self.mlp = SwiGLU(
-                in_features=dim, 
-                hidden_features=mlp_hidden_dim, 
-                subln=subln,
-                norm_layer=norm_layer,
-            )
+            if partial_finetune:
+                self.mlp = SwiGLU_sep(
+                    in_features=dim, 
+                    hidden_features=mlp_hidden_dim, 
+                    subln=subln,
+                    norm_layer=norm_layer,
+                )
+            else:
+                self.mlp = SwiGLU(
+                    in_features=dim, 
+                    hidden_features=mlp_hidden_dim, 
+                    subln=subln,
+                    norm_layer=norm_layer,
+                )
         else:
             self.mlp = Mlp(
                 in_features=dim, 
@@ -444,7 +496,7 @@ class EVAVisionTransformer(nn.Module):
                  drop_path_rate=0., norm_layer=nn.LayerNorm, init_values=None, patch_dropout=0.,
                  use_abs_pos_emb=True, use_rel_pos_bias=False, use_shared_rel_pos_bias=False, rope=False,
                  use_mean_pooling=True, init_scale=0.001, grad_checkpointing=False, xattn=False, postnorm=False,
-                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False):
+                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False, partial_finetune=False):
         super().__init__()
         #self.img_size = img_size
         if isinstance(img_size,tuple):
@@ -485,6 +537,7 @@ class EVAVisionTransformer(nn.Module):
             self.rope = None
 
         self.naiveswiglu = naiveswiglu
+        self.partial_finetune = partial_finetune
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         self.use_rel_pos_bias = use_rel_pos_bias
@@ -493,7 +546,7 @@ class EVAVisionTransformer(nn.Module):
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
                 init_values=init_values, window_size=self.patch_embed.patch_shape if use_rel_pos_bias else None,
-                xattn=xattn, rope=self.rope, postnorm=postnorm, subln=subln, naiveswiglu=naiveswiglu)
+                xattn=xattn, rope=self.rope, postnorm=postnorm, subln=subln, naiveswiglu=naiveswiglu, partial_finetune=partial_finetune)
             for i in range(depth)])
         self.norm = nn.Identity() if use_mean_pooling else norm_layer(embed_dim)
         self.fc_norm = norm_layer(embed_dim) if use_mean_pooling else None
@@ -526,7 +579,11 @@ class EVAVisionTransformer(nn.Module):
         for layer_id, layer in enumerate(self.blocks):
             rescale(layer.attn.proj.weight.data, layer_id + 1)
             if self.naiveswiglu:
-                rescale(layer.mlp.w3.weight.data, layer_id + 1)
+                if self.partial_finetune:
+                    rescale(layer.mlp.w3_patch.weight.data, layer_id + 1)
+                    rescale(layer.mlp.w3_det.weight.data, layer_id + 1)
+                else:
+                    rescale(layer.mlp.w3.weight.data, layer_id + 1)
             else:
                 rescale(layer.mlp.fc2.weight.data, layer_id + 1)
 
@@ -545,7 +602,7 @@ class EVAVisionTransformer(nn.Module):
     def get_num_layers(self):
         return len(self.blocks)
     
-    def lock(self, unlocked_groups=0, freeze_bn_stats=False):
+    def lock(self, unlocked_groups=0):
         assert unlocked_groups == 0, 'partial locking not currently supported for this model'
         for param in self.parameters():
             param.requires_grad = False
