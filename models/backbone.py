@@ -582,6 +582,8 @@ def eva_tiny_partial_finetune(pretrained=None, **kwargs):
 
         unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
         for name, param in model.named_parameters():
+            #if name in ['pos_embed', 'cls_token']:
+            #    print(name)
             for unfrozen_param in unfrozen_parameters:
                 if unfrozen_param in name:
                     param.requires_grad = True
@@ -656,6 +658,69 @@ def eva_small_mim(pretrained=None, **kwargs):
             checkpoint['blocks.%d.mlp.w2.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][1024:]
             del checkpoint['blocks.%d.mlp.w12.weight'%k], checkpoint['blocks.%d.mlp.w12.bias'%k]
         model.load_state_dict(checkpoint, strict=False)
+    return model, 384
+
+
+def eva_small_partial_finetune(pretrained=None, **kwargs):
+    model = EVAVisionTransformer(
+        img_size=336, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=2.6667, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), use_mean_pooling=False, xattn=True, intp_freq=True, pt_hw_seq_len=16, 
+        naiveswiglu=True, rope=True, partial_finetune=True, **kwargs)
+    if pretrained:
+        # checkpoint = torch.load('deit_base_distilled_patch16_384-d0272ac0.pth', map_location="cpu")
+        # checkpoint = torch.hub.load_state_dict_from_url(
+        #     url="https://dl.fbaipublicfiles.com/deit/deit_base_distilled_patch16_384-d0272ac0.pth",
+        #     map_location="cpu", check_hash=True
+        # )
+        checkpoint = torch.load(pretrained, map_location="cpu")["module"]
+        for k in list(checkpoint.keys()):
+            if 'rope' in k:
+                del checkpoint[k]
+        checkpoint['patch_embed.proj.weight'] = nn.functional.interpolate(checkpoint['patch_embed.proj.weight'], size=(16,16), mode='bicubic', align_corners=False)
+        #checkpoint['pos_embed'] = nn.functional.interpolate(checkpoint['pos_embed'], size=(16,16), mode='bicubic', align_corners=False)
+        pos_embed = checkpoint['pos_embed'][:,1:,:].transpose(1,2).reshape(1, 384, 24, 24)
+        # pos_embed = checkpoint['pos_embed'][:,1:,:].transpose(1,2).reshape(1, 192, 16, 16)
+        cls_pos_embed = checkpoint['pos_embed'][:,0,:]
+        # pos_embed = nn.functional.interpolate(pos_embed, size=(14,14), mode='bicubic', align_corners=False)
+        pos_embed = nn.functional.interpolate(pos_embed, size=(21,21), mode='bicubic', align_corners=False)
+        #pos_embed = pos_embed.reshape(1, 192, 14*14).transpose(1,2)
+        pos_embed = pos_embed.reshape(1, 384, 21*21).transpose(1,2)
+        checkpoint['pos_embed'] = torch.cat([cls_pos_embed.unsqueeze(0), pos_embed], dim=1) #torch.Size([1, 442, 192])
+        for k in range(12):
+            checkpoint['blocks.%d.mlp.w1_patch.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][:1024]
+            checkpoint['blocks.%d.mlp.w1_det.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][:1024]
+
+            checkpoint['blocks.%d.mlp.w1_patch.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][:1024]
+            checkpoint['blocks.%d.mlp.w1_det.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][:1024]
+
+            checkpoint['blocks.%d.mlp.w2_patch.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][1024:]
+            checkpoint['blocks.%d.mlp.w2_det.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][1024:]
+
+            checkpoint['blocks.%d.mlp.w2_patch.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][1024:]
+            checkpoint['blocks.%d.mlp.w2_det.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][1024:]
+
+            del checkpoint['blocks.%d.mlp.w12.weight'%k], checkpoint['blocks.%d.mlp.w12.bias'%k]
+            
+            checkpoint['blocks.%d.mlp.w3_patch.weight'%k] = checkpoint['blocks.%d.mlp.w3.weight'%k]
+            checkpoint['blocks.%d.mlp.w3_det.weight'%k] = checkpoint['blocks.%d.mlp.w3.weight'%k]
+
+            checkpoint['blocks.%d.mlp.w3_patch.bias'%k] = checkpoint['blocks.%d.mlp.w3.bias'%k]
+            checkpoint['blocks.%d.mlp.w3_det.bias'%k] = checkpoint['blocks.%d.mlp.w3.bias'%k]
+
+            del checkpoint['blocks.%d.mlp.w3.weight'%k], checkpoint['blocks.%d.mlp.w3.bias'%k]
+
+        model.load_state_dict(checkpoint, strict=False)
+
+        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
+        for name, param in model.named_parameters():
+            #if name in ['pos_embed', 'cls_token']:
+            #    print(name)
+            for unfrozen_param in unfrozen_parameters:
+                if unfrozen_param in name:
+                    param.requires_grad = True
+                    break
+                else:
+                    param.requires_grad = False
     return model, 384
 
 

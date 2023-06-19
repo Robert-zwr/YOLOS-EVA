@@ -79,7 +79,10 @@ class EVA_Detector(nn.Module):
         elif backbone_name == 'tiny_mim':
             self.backbone, hidden_dim = eva_tiny_mim(pretrained=pre_trained)
         elif backbone_name == 'small':
-            self.backbone, hidden_dim = eva_small(pretrained=pre_trained)
+            if use_partial_finetune:
+                self.backbone, hidden_dim = eva_small_partial_finetune(pretrained=pre_trained)
+            else:
+                self.backbone, hidden_dim = eva_small(pretrained=pre_trained)
         elif backbone_name == 'small_mim':
             self.backbone, hidden_dim = eva_small_mim(pretrained=pre_trained)
         elif backbone_name == 'base':
