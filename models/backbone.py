@@ -580,7 +580,7 @@ def eva_tiny_partial_finetune(pretrained=None, **kwargs):
 
         model.load_state_dict(checkpoint, strict=False)
 
-        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det', 'cls_token']
+        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
         for name, param in model.named_parameters():
             #if name in ['pos_embed', 'cls_token']:
             #    print(name)
@@ -641,7 +641,7 @@ def eva_tiny_mim_partial_finetune(pretrained=None, **kwargs):
 
         model.load_state_dict(checkpoint, strict=False)
 
-        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det', 'cls_token']
+        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
         for name, param in model.named_parameters():
             for unfrozen_param in unfrozen_parameters:
                 if unfrozen_param in name:
@@ -770,7 +770,7 @@ def eva_small_partial_finetune(pretrained=None, **kwargs):
 
         model.load_state_dict(checkpoint, strict=False)
 
-        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det', 'cls_token']
+        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
         for name, param in model.named_parameters():
             #if name in ['pos_embed', 'cls_token']:
             #    print(name)
@@ -830,7 +830,7 @@ def eva_small_mim_partial_finetune(pretrained=None, **kwargs):
 
         model.load_state_dict(checkpoint, strict=False)
 
-        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det', 'cls_token']
+        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
         for name, param in model.named_parameters():
             #if name in ['pos_embed', 'cls_token']:
             #    print(name)

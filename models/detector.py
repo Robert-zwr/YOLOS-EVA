@@ -96,7 +96,7 @@ class EVA_Detector(nn.Module):
         else:
             raise ValueError(f'backbone {backbone_name} not supported')
         
-        self.backbone.finetune_det(det_token_num=det_token_num, img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint)
+        self.backbone.finetune_det(det_token_num=det_token_num, img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint, use_partial_finetune=use_partial_finetune)
         
         self.class_embed = MLP(hidden_dim, hidden_dim, num_classes + 1, 3)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)

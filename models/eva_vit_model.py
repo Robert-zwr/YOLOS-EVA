@@ -622,7 +622,7 @@ class EVAVisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def finetune_det(self, img_size=[800, 1344], det_token_num=100, mid_pe_size=None, use_checkpoint=False):
+    def finetune_det(self, img_size=[800, 1344], det_token_num=100, mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False):
         # import pdb;pdb.set_trace()
 
         import math
@@ -647,7 +647,8 @@ class EVAVisionTransformer(nn.Module):
         # torch.Size([1, 768, 50, 84])
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1,2) # torch.Size([1, 4200, 768])
-        self.pos_embed = torch.nn.Parameter(torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1))
+        self.pos_embed = torch.nn.Parameter(torch.cat((cls_pos_embed, patch_pos_embed), dim=1), requires_grad=not use_partial_finetune)
+        self.det_pos_embed = torch.nn.Parameter(det_pos_embed)
 
         _, head_dim = self.rope.freqs_cos.shape
         freqs_cos = self.rope.freqs_cos.transpose(0,1).view(B, head_dim, P_H, P_W)
@@ -677,8 +678,8 @@ class EVAVisionTransformer(nn.Module):
 
         cls_pos_embed = pos_embed[:, 0, :]
         cls_pos_embed = cls_pos_embed[:,None]
-        det_pos_embed = pos_embed[:, -self.det_token_num:,:]
-        patch_pos_embed = pos_embed[:, 1:-self.det_token_num, :] # [1,4200,768]
+        # det_pos_embed = pos_embed[:, -self.det_token_num:,:]
+        patch_pos_embed = pos_embed[:, 1:, :] # [1,4200,768]
         patch_pos_embed = patch_pos_embed.transpose(1,2)
         freqs_cos = self.freqs_cos.transpose(0,1)
         freqs_sin = self.freqs_sin.transpose(0,1)
@@ -697,7 +698,7 @@ class EVAVisionTransformer(nn.Module):
         new_P_H, new_P_W = H//self.patch_size, W//self.patch_size
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
-        scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1)
+        scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed), dim=1)
 
         freqs_cos = nn.functional.interpolate(freqs_cos, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         freqs_sin = nn.functional.interpolate(freqs_sin, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
@@ -714,7 +715,7 @@ class EVAVisionTransformer(nn.Module):
         batch_size, seq_len, _ = x.size()
 
         # interpolate init pe
-        if (self.pos_embed.shape[1] - 1 - self.det_token_num) != seq_len:
+        if (self.pos_embed.shape[1] - 1) != seq_len:
             temp_pos_embed = self.InterpolateInitPosEmbed(self.pos_embed, img_size=(H,W))
         else:
             temp_pos_embed = self.pos_embed
@@ -725,7 +726,7 @@ class EVAVisionTransformer(nn.Module):
         det_token = self.det_token.expand(B, -1, -1)
         x = torch.cat((cls_tokens, x, det_token), dim=1)  # [B,1+n_patch+100, embed_dim=768]
         if self.pos_embed is not None:
-            x = x + temp_pos_embed
+            x = x + torch.cat((temp_pos_embed, self.det_pos_embed), dim=1)
         x = self.pos_drop(x)
 
         # a patch_dropout of 0. would mean it is disabled and this function would do nothing but return what was passed in
