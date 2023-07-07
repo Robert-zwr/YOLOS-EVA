@@ -68,12 +68,12 @@ class Detector(nn.Module):
         return attention
     
 class EVA_Detector(nn.Module):
-    def __init__(self, num_classes, pre_trained=None, det_token_num=100, backbone_name='base', init_pe_size=[800,1344], mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False):
+    def __init__(self, num_classes, pre_trained=None, det_token_num=100, backbone_name='base', init_pe_size=[800,1344], mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False, finetune_layers_num=0):
         super().__init__()
 
         if backbone_name == 'tiny':
             if use_partial_finetune:
-                self.backbone, hidden_dim = eva_tiny_partial_finetune(pretrained=pre_trained)
+                self.backbone, hidden_dim = eva_tiny_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
             else:
                 self.backbone, hidden_dim = eva_tiny(pretrained=pre_trained)
         elif backbone_name == 'tiny_mim':
@@ -362,6 +362,7 @@ def build(args):
             mid_pe_size=args.mid_pe_size,
             use_checkpoint=args.use_checkpoint,
             use_partial_finetune=args.use_partial_finetune,
+            finetune_layers_num = args.finetune_layers_num,
         )
     else:
         raise ValueError(f'model {args.model_name} not supported')

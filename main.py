@@ -69,6 +69,8 @@ def get_args_parser():
                         help="Name of the deit backbone to use")
     parser.add_argument('--use_partial_finetune', action='store_true', default=False,
                         help="whether to use partial finetuning")
+    parser.add_argument('--finetune_layers_num', default=0, type=int,
+                        help="Number of last layers to finetune")
     parser.add_argument('--pre_trained', default='',
                         help="set imagenet pretrained model path if not train yolos from scatch")
     parser.add_argument('--init_pe_size', nargs='+', type=int,
