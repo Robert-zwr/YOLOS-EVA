@@ -604,7 +604,7 @@ def eva_tiny_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
     return model, 192
 
 
-def eva_tiny_mim_partial_finetune(pretrained=None, **kwargs):
+def eva_tiny_mim_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
     model = EVAVisionTransformer(
         img_size=224, patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=2.6667, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), use_mean_pooling=False, xattn=True, intp_freq=True, pt_hw_seq_len=16, 
@@ -652,13 +652,25 @@ def eva_tiny_mim_partial_finetune(pretrained=None, **kwargs):
         model.load_state_dict(checkpoint, strict=False)
 
         unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
-        for name, param in model.named_parameters():
+        all_layers = list(range(12))
+        if finetune_layers_num == 0:
+            finetune_layers = []
+        elif finetune_layers_num > 12:
+            finetune_layers = all_layers
+        else:
+            finetune_layers = all_layers[-finetune_layers_num:]
+        for name, param in model.named_parameters():                            
             for unfrozen_param in unfrozen_parameters:
                 if unfrozen_param in name:
                     param.requires_grad = True
                     break
                 else:
                     param.requires_grad = False
+            
+            for finetune_layer in finetune_layers:
+                if 'blocks.%d'%finetune_layer in name:
+                    param.requires_grad = True
+                    break
 
     return model, 192
 
@@ -730,7 +742,7 @@ def eva_small_mim(pretrained=None, **kwargs):
     return model, 384
 
 
-def eva_small_partial_finetune(pretrained=None, **kwargs):
+def eva_small_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
     model = EVAVisionTransformer(
         img_size=336, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=2.6667, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), use_mean_pooling=False, xattn=True, intp_freq=True, pt_hw_seq_len=16, 
@@ -781,19 +793,29 @@ def eva_small_partial_finetune(pretrained=None, **kwargs):
         model.load_state_dict(checkpoint, strict=False)
 
         unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
-        for name, param in model.named_parameters():
-            #if name in ['pos_embed', 'cls_token']:
-            #    print(name)
+        all_layers = list(range(12))
+        if finetune_layers_num == 0:
+            finetune_layers = []
+        elif finetune_layers_num > 12:
+            finetune_layers = all_layers
+        else:
+            finetune_layers = all_layers[-finetune_layers_num:]
+        for name, param in model.named_parameters():                            
             for unfrozen_param in unfrozen_parameters:
                 if unfrozen_param in name:
                     param.requires_grad = True
                     break
                 else:
                     param.requires_grad = False
+            
+            for finetune_layer in finetune_layers:
+                if 'blocks.%d'%finetune_layer in name:
+                    param.requires_grad = True
+                    break
     return model, 384
 
 
-def eva_small_mim_partial_finetune(pretrained=None, **kwargs):
+def eva_small_mim_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
     model = EVAVisionTransformer(
         img_size=224, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=2.6667, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), use_mean_pooling=False, xattn=True, intp_freq=True, pt_hw_seq_len=16, 
@@ -841,15 +863,25 @@ def eva_small_mim_partial_finetune(pretrained=None, **kwargs):
         model.load_state_dict(checkpoint, strict=False)
 
         unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
-        for name, param in model.named_parameters():
-            #if name in ['pos_embed', 'cls_token']:
-            #    print(name)
+        all_layers = list(range(12))
+        if finetune_layers_num == 0:
+            finetune_layers = []
+        elif finetune_layers_num > 12:
+            finetune_layers = all_layers
+        else:
+            finetune_layers = all_layers[-finetune_layers_num:]
+        for name, param in model.named_parameters():                            
             for unfrozen_param in unfrozen_parameters:
                 if unfrozen_param in name:
                     param.requires_grad = True
                     break
                 else:
                     param.requires_grad = False
+            
+            for finetune_layer in finetune_layers:
+                if 'blocks.%d'%finetune_layer in name:
+                    param.requires_grad = True
+                    break
     return model, 384
 
 
