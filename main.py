@@ -71,6 +71,8 @@ def get_args_parser():
                         help="whether to use partial finetuning")
     parser.add_argument('--finetune_layers_num', default=0, type=int,
                         help="Number of last layers to finetune")
+    parser.add_argument('--patch_size', default=16, type=int,
+                        help="patch size for yolos")
     parser.add_argument('--pre_trained', default='',
                         help="set imagenet pretrained model path if not train yolos from scatch")
     parser.add_argument('--init_pe_size', nargs='+', type=int,
