@@ -480,7 +480,7 @@ def tiny_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
                 checkpoint['blocks.%d.mlp.fc2.weight'%k], checkpoint['blocks.%d.mlp.fc2.bias'%k],
         model.load_state_dict(checkpoint, strict=False)
 
-        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
+        unfrozen_parameters = ['fc1_det', 'fc2_det']
         all_layers = list(range(12))
         if finetune_layers_num == 0:
             finetune_layers = []
@@ -547,7 +547,7 @@ def small_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
                 checkpoint['blocks.%d.mlp.fc2.weight'%k], checkpoint['blocks.%d.mlp.fc2.bias'%k],
         model.load_state_dict(checkpoint, strict=False)
 
-        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
+        unfrozen_parameters = ['fc1_det', 'fc2_det']
         all_layers = list(range(12))
         if finetune_layers_num == 0:
             finetune_layers = []
