@@ -22,6 +22,40 @@ class Mlp(nn.Module):
         x = self.fc2(x)
         x = self.drop(x)
         return x
+    
+class Mlp_sep(nn.Module):
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1_patch = nn.Linear(in_features, hidden_features)
+        self.fc1_det = nn.Linear(in_features, hidden_features)
+        self.act = act_layer()
+        self.fc2_patch = nn.Linear(hidden_features, out_features)
+        self.fc2_det = nn.Linear(hidden_features, out_features)
+        self.drop = nn.Dropout(drop)
+
+        self.num_det_tokens = 100
+
+    def forward(self, x):
+        x_patch = x[:,:-self.num_det_tokens,:]
+        x_det = x[:,-self.num_det_tokens:,:]
+
+        x_patch = self.fc1_patch(x_patch)
+        x_det = self.fc1_det(x_det)
+
+        x_patch = self.act(x_patch)
+        x_det = self.act(x_det)
+
+        x_patch = self.drop(x_patch)
+        x_det = self.drop(x_det)
+
+        x_patch = self.fc2_patch(x_patch)
+        x_det = self.fc2_det(x_det)
+        
+        x = torch.cat((x_patch, x_det), dim=1)
+        x = self.drop(x)
+        return x
 
 class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
@@ -56,7 +90,7 @@ class Attention(nn.Module):
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm, partial_finetune=False):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
@@ -65,7 +99,10 @@ class Block(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+        if partial_finetune:
+            self.mlp = Mlp_sep(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+        else:
+            self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
     def forward(self, x, return_attention=False):
         if return_attention:
@@ -142,7 +179,7 @@ class VisionTransformer(nn.Module):
     """
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                 drop_path_rate=0., hybrid_backbone=None, norm_layer=nn.LayerNorm, is_distill=False):
+                 drop_path_rate=0., hybrid_backbone=None, norm_layer=nn.LayerNorm, is_distill=False, partial_finetune=False):
         super().__init__()
         
         if isinstance(img_size,tuple):
@@ -176,7 +213,7 @@ class VisionTransformer(nn.Module):
         self.blocks = nn.ModuleList([
             Block(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer)
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer, partial_finetune=partial_finetune)
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 
@@ -205,7 +242,7 @@ class VisionTransformer(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def finetune_det(self, img_size=[800, 1344], det_token_num=100, mid_pe_size=None, use_checkpoint=False):
+    def finetune_det(self, img_size=[800, 1344], det_token_num=100, mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False):
         # import pdb;pdb.set_trace()
 
         import math
@@ -229,7 +266,9 @@ class VisionTransformer(nn.Module):
         new_P_H, new_P_W = H//self.patch_size, W//self.patch_size
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
-        self.pos_embed = torch.nn.Parameter(torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1))
+        self.pos_embed = torch.nn.Parameter(torch.cat((cls_pos_embed, patch_pos_embed), dim=1), requires_grad=not use_partial_finetune)
+        self.det_pos_embed = torch.nn.Parameter(det_pos_embed)
+
         self.img_size = img_size
         if mid_pe_size == None:
             self.has_mid_pe = False
@@ -257,8 +296,8 @@ class VisionTransformer(nn.Module):
         # import pdb;pdb.set_trace()
         cls_pos_embed = pos_embed[:, 0, :]
         cls_pos_embed = cls_pos_embed[:,None]
-        det_pos_embed = pos_embed[:, -self.det_token_num:,:]
-        patch_pos_embed = pos_embed[:, 1:-self.det_token_num, :]
+        # det_pos_embed = pos_embed[:, -self.det_token_num:,:]
+        patch_pos_embed = pos_embed[:, 1:, :]
         patch_pos_embed = patch_pos_embed.transpose(1,2)
         B, E, Q = patch_pos_embed.shape
 
@@ -273,7 +312,7 @@ class VisionTransformer(nn.Module):
         new_P_H, new_P_W = H//self.patch_size, W//self.patch_size
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1, 2)
-        scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed, det_pos_embed), dim=1)
+        scale_pos_embed = torch.cat((cls_pos_embed, patch_pos_embed), dim=1)
         return scale_pos_embed
 
     def InterpolateMidPosEmbed(self, pos_embed, img_size=(800, 1344)):
@@ -303,7 +342,7 @@ class VisionTransformer(nn.Module):
 
         x = self.patch_embed(x) # torch.Size([2, n_patch, embed_dim])
         # interpolate init pe
-        if (self.pos_embed.shape[1] - 1 - self.det_token_num) != x.shape[1]:
+        if (self.pos_embed.shape[1] - 1) != x.shape[1]:
             temp_pos_embed = self.InterpolateInitPosEmbed(self.pos_embed, img_size=(H,W))
         else:
             temp_pos_embed = self.pos_embed
@@ -319,7 +358,7 @@ class VisionTransformer(nn.Module):
         cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         det_token = self.det_token.expand(B, -1, -1)
         x = torch.cat((cls_tokens, x, det_token), dim=1)
-        x = x + temp_pos_embed
+        x = x + torch.cat((temp_pos_embed, self.det_pos_embed), dim=1)
         x = self.pos_drop(x)
 
         for i in range(len((self.blocks))):
@@ -412,6 +451,58 @@ def tiny(pretrained=None, **kwargs):
         model.load_state_dict(checkpoint["model"], strict=False)
     return model, 192
 
+
+def tiny_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
+    model = VisionTransformer(
+                patch_size=16, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4, qkv_bias=True,
+                norm_layer=partial(nn.LayerNorm, eps=1e-6), partial_finetune=True)
+    if pretrained: 
+        # checkpoint = torch.load('deit_tiny_patch16_224-a1311bcf.pth', map_location="cpu")
+        # checkpoint = torch.hub.load_state_dict_from_url(
+        #     url="https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth",
+        #     map_location="cpu", check_hash=True
+        # )
+        checkpoint = torch.load(pretrained, map_location="cpu")['model']
+        for k in range(12):
+            checkpoint['blocks.%d.mlp.fc1_patch.weight'%k] = checkpoint['blocks.%d.mlp.fc1.weight'%k]
+            checkpoint['blocks.%d.mlp.fc1_det.weight'%k] = checkpoint['blocks.%d.mlp.fc1.weight'%k]
+
+            checkpoint['blocks.%d.mlp.fc1_patch.bias'%k] = checkpoint['blocks.%d.mlp.fc1.bias'%k]
+            checkpoint['blocks.%d.mlp.fc1_det.bias'%k] = checkpoint['blocks.%d.mlp.fc1.bias'%k]
+
+            checkpoint['blocks.%d.mlp.fc2_patch.weight'%k] = checkpoint['blocks.%d.mlp.fc2.weight'%k]
+            checkpoint['blocks.%d.mlp.fc2_det.weight'%k] = checkpoint['blocks.%d.mlp.fc2.weight'%k]
+
+            checkpoint['blocks.%d.mlp.fc2_patch.bias'%k] = checkpoint['blocks.%d.mlp.fc2.bias'%k]
+            checkpoint['blocks.%d.mlp.fc2_det.bias'%k] = checkpoint['blocks.%d.mlp.fc2.bias'%k]
+
+            del checkpoint['blocks.%d.mlp.fc1.weight'%k], checkpoint['blocks.%d.mlp.fc1.bias'%k],\
+                checkpoint['blocks.%d.mlp.fc2.weight'%k], checkpoint['blocks.%d.mlp.fc2.bias'%k],
+        model.load_state_dict(checkpoint, strict=False)
+
+        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
+        all_layers = list(range(12))
+        if finetune_layers_num == 0:
+            finetune_layers = []
+        elif finetune_layers_num > 12:
+            finetune_layers = all_layers
+        else:
+            finetune_layers = all_layers[-finetune_layers_num:]
+        for name, param in model.named_parameters():                            
+            for unfrozen_param in unfrozen_parameters:
+                if unfrozen_param in name:
+                    param.requires_grad = True
+                    break
+                else:
+                    param.requires_grad = False
+            
+            for finetune_layer in finetune_layers:
+                if 'blocks.%d'%finetune_layer in name:
+                    param.requires_grad = True
+                    break
+
+    return model, 192
+
     
 def small(pretrained=None, **kwargs):
     model = VisionTransformer(
@@ -425,6 +516,58 @@ def small(pretrained=None, **kwargs):
         # )
         checkpoint = torch.load(pretrained, map_location="cpu")
         model.load_state_dict(checkpoint["model"], strict=False)
+    return model, 384
+
+
+def small_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
+    model = VisionTransformer(
+        patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=4, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), partial_finetune=True, **kwargs)
+    if pretrained:
+        # checkpoint = torch.load('deit_small_patch16_224-cd65a155.pth', map_location="cpu")
+        # checkpoint = torch.hub.load_state_dict_from_url(
+        #     url="https://dl.fbaipublicfiles.com/deit/deit_small_patch16_224-cd65a155.pth",
+        #     map_location="cpu", check_hash=True
+        # )
+        checkpoint = torch.load(pretrained, map_location="cpu")['model']
+        for k in range(12):
+            checkpoint['blocks.%d.mlp.fc1_patch.weight'%k] = checkpoint['blocks.%d.mlp.fc1.weight'%k]
+            checkpoint['blocks.%d.mlp.fc1_det.weight'%k] = checkpoint['blocks.%d.mlp.fc1.weight'%k]
+
+            checkpoint['blocks.%d.mlp.fc1_patch.bias'%k] = checkpoint['blocks.%d.mlp.fc1.bias'%k]
+            checkpoint['blocks.%d.mlp.fc1_det.bias'%k] = checkpoint['blocks.%d.mlp.fc1.bias'%k]
+
+            checkpoint['blocks.%d.mlp.fc2_patch.weight'%k] = checkpoint['blocks.%d.mlp.fc2.weight'%k]
+            checkpoint['blocks.%d.mlp.fc2_det.weight'%k] = checkpoint['blocks.%d.mlp.fc2.weight'%k]
+
+            checkpoint['blocks.%d.mlp.fc2_patch.bias'%k] = checkpoint['blocks.%d.mlp.fc2.bias'%k]
+            checkpoint['blocks.%d.mlp.fc2_det.bias'%k] = checkpoint['blocks.%d.mlp.fc2.bias'%k]
+
+            del checkpoint['blocks.%d.mlp.fc1.weight'%k], checkpoint['blocks.%d.mlp.fc1.bias'%k],\
+                checkpoint['blocks.%d.mlp.fc2.weight'%k], checkpoint['blocks.%d.mlp.fc2.bias'%k],
+        model.load_state_dict(checkpoint, strict=False)
+
+        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
+        all_layers = list(range(12))
+        if finetune_layers_num == 0:
+            finetune_layers = []
+        elif finetune_layers_num > 12:
+            finetune_layers = all_layers
+        else:
+            finetune_layers = all_layers[-finetune_layers_num:]
+        for name, param in model.named_parameters():                            
+            for unfrozen_param in unfrozen_parameters:
+                if unfrozen_param in name:
+                    param.requires_grad = True
+                    break
+                else:
+                    param.requires_grad = False
+            
+            for finetune_layer in finetune_layers:
+                if 'blocks.%d'%finetune_layer in name:
+                    param.requires_grad = True
+                    break
+
     return model, 384
 
 

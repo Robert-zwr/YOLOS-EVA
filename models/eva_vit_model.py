@@ -657,8 +657,6 @@ class EVAVisionTransformer(nn.Module):
         freqs_sin = nn.functional.interpolate(freqs_sin, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         self.register_buffer("freqs_cos", freqs_cos.squeeze().flatten(1).transpose(0,1))
         self.register_buffer("freqs_sin", freqs_sin.squeeze().flatten(1).transpose(0,1))
-        #self.freqs_cos = nn.Parameter(freqs_cos.squeeze().flatten(1).transpose(0,1))
-        #self.freqs_sin = nn.Parameter(freqs_sin.squeeze().flatten(1).transpose(0,1))
 
         self.img_size = img_size
         if mid_pe_size == None:

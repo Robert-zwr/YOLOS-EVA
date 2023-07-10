@@ -31,13 +31,19 @@ class MLP(nn.Module):
         return x
 
 class Detector(nn.Module):
-    def __init__(self, num_classes, pre_trained=None, det_token_num=100, backbone_name='tiny', init_pe_size=[800,1344], mid_pe_size=None, use_checkpoint=False):
+    def __init__(self, num_classes, pre_trained=None, det_token_num=100, backbone_name='tiny', init_pe_size=[800,1344], mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False, finetune_layers_num=0):
         super().__init__()
         # import pdb;pdb.set_trace()
         if backbone_name == 'tiny':
-            self.backbone, hidden_dim = tiny(pretrained=pre_trained)
+            if use_partial_finetune:
+                self.backbone, hidden_dim = tiny_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
+            else:
+                self.backbone, hidden_dim = tiny(pretrained=pre_trained)
         elif backbone_name == 'small':
-            self.backbone, hidden_dim = small(pretrained=pre_trained)
+            if use_partial_finetune:
+                self.backbone, hidden_dim = small_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
+            else: 
+                self.backbone, hidden_dim = small(pretrained=pre_trained)
         elif backbone_name == 'base':
             self.backbone, hidden_dim = base(pretrained=pre_trained)
         elif backbone_name == 'small_dWr':
@@ -45,7 +51,7 @@ class Detector(nn.Module):
         else:
             raise ValueError(f'backbone {backbone_name} not supported')
         
-        self.backbone.finetune_det(det_token_num=det_token_num, img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint)
+        self.backbone.finetune_det(det_token_num=det_token_num, img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint, use_partial_finetune=use_partial_finetune)
         
         self.class_embed = MLP(hidden_dim, hidden_dim, num_classes + 1, 3)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
@@ -371,6 +377,8 @@ def build(args):
             init_pe_size=args.init_pe_size,
             mid_pe_size=args.mid_pe_size,
             use_checkpoint=args.use_checkpoint,
+            use_partial_finetune=args.use_partial_finetune,
+            finetune_layers_num = args.finetune_layers_num,
         )
     elif args.model_name == 'eva':
         model = EVA_Detector(
