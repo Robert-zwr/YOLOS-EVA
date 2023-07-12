@@ -1333,35 +1333,35 @@ def eva_base_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
             if 'rope' in k:
                 del checkpoint[k]
         checkpoint['patch_embed.proj.weight'] = nn.functional.interpolate(checkpoint['patch_embed.proj.weight'], size=(16,16), mode='bicubic', align_corners=False)
-        pos_embed = checkpoint['pos_embed'][:,1:,:].transpose(1,2).reshape(1, 192, 32, 32)
+        pos_embed = checkpoint['pos_embed'][:,1:,:].transpose(1,2).reshape(1, 768, 32, 32)
         cls_pos_embed = checkpoint['pos_embed'][:,0,:]
         pos_embed = nn.functional.interpolate(pos_embed, size=(28,28), mode='bicubic', align_corners=False)
-        pos_embed = pos_embed.reshape(1, 192, 28*28).transpose(1,2)
+        pos_embed = pos_embed.reshape(1, 768, 28*28).transpose(1,2)
         checkpoint['pos_embed'] = torch.cat([cls_pos_embed.unsqueeze(0), pos_embed], dim=1) #torch.Size([1, 442, 192])
         for k in range(12):
-            checkpoint['blocks.%d.mlp.w1_patch.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][:512]
-            checkpoint['blocks.%d.mlp.w1_det.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][:512]
+            checkpoint['blocks.%d.mlp.w1_patch.weight'%k] = checkpoint['blocks.%d.mlp.w1.weight'%k]
+            checkpoint['blocks.%d.mlp.w1_det.weight'%k] = checkpoint['blocks.%d.mlp.w1.weight'%k]
 
-            checkpoint['blocks.%d.mlp.w1_patch.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][:512]
-            checkpoint['blocks.%d.mlp.w1_det.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][:512]
+            checkpoint['blocks.%d.mlp.w1_patch.bias'%k] = checkpoint['blocks.%d.mlp.w1.bias'%k]
+            checkpoint['blocks.%d.mlp.w1_det.bias'%k] = checkpoint['blocks.%d.mlp.w1.bias'%k]
 
-            checkpoint['blocks.%d.mlp.w2_patch.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][512:]
-            checkpoint['blocks.%d.mlp.w2_det.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][512:]
+            checkpoint['blocks.%d.mlp.w2_patch.weight'%k] = checkpoint['blocks.%d.mlp.w2.weight'%k]
+            checkpoint['blocks.%d.mlp.w2_det.weight'%k] = checkpoint['blocks.%d.mlp.w2.weight'%k]
 
-            checkpoint['blocks.%d.mlp.w2_patch.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][512:]
-            checkpoint['blocks.%d.mlp.w2_det.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][512:]
+            checkpoint['blocks.%d.mlp.w2_patch.bias'%k] = checkpoint['blocks.%d.mlp.w2.bias'%k]
+            checkpoint['blocks.%d.mlp.w2_det.bias'%k] = checkpoint['blocks.%d.mlp.w2.bias'%k]
 
-            del checkpoint['blocks.%d.mlp.w12.weight'%k], checkpoint['blocks.%d.mlp.w12.bias'%k]
-            '''
-            if 'blocks.%d.mlp.ffn_ln_patch'%k in checkpoint.keys():
-                checkpoint['blocks.%d.mlp.ffn_ln_patch.weight'%k] = checkpoint['blocks.%d.mlp.ffn_ln.weight'%k]
-                checkpoint['blocks.%d.mlp.ffn_ln_det.weight'%k] = checkpoint['blocks.%d.mlp.ffn_ln.weight'%k]
+            del checkpoint['blocks.%d.mlp.w1.weight'%k], checkpoint['blocks.%d.mlp.w1.bias'%k],\
+                checkpoint['blocks.%d.mlp.w2.weight'%k], checkpoint['blocks.%d.mlp.w2.bias'%k]
+            
+            checkpoint['blocks.%d.mlp.ffn_ln_patch.weight'%k] = checkpoint['blocks.%d.mlp.ffn_ln.weight'%k]
+            checkpoint['blocks.%d.mlp.ffn_ln_det.weight'%k] = checkpoint['blocks.%d.mlp.ffn_ln.weight'%k]
 
-                checkpoint['blocks.%d.mlp.ffn_ln_patch.bias'%k] = checkpoint['blocks.%d.mlp.ffn_ln.bias'%k]
-                checkpoint['blocks.%d.mlp.ffn_ln_det.bias'%k] = checkpoint['blocks.%d.mlp.ffn_ln.bias'%k]
+            checkpoint['blocks.%d.mlp.ffn_ln_patch.bias'%k] = checkpoint['blocks.%d.mlp.ffn_ln.bias'%k]
+            checkpoint['blocks.%d.mlp.ffn_ln_det.bias'%k] = checkpoint['blocks.%d.mlp.ffn_ln.bias'%k]
 
-                del checkpoint['blocks.%d.mlp.ffn_ln.weight'%k], checkpoint['blocks.%d.mlp.ffn_ln.bias'%k]
-            '''
+            del checkpoint['blocks.%d.mlp.ffn_ln.weight'%k], checkpoint['blocks.%d.mlp.ffn_ln.bias'%k]
+            
             checkpoint['blocks.%d.mlp.w3_patch.weight'%k] = checkpoint['blocks.%d.mlp.w3.weight'%k]
             checkpoint['blocks.%d.mlp.w3_det.weight'%k] = checkpoint['blocks.%d.mlp.w3.weight'%k]
 
@@ -1372,7 +1372,7 @@ def eva_base_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
 
         model.load_state_dict(checkpoint, strict=False)
 
-        unfrozen_parameters = ['w1_det', 'w2_det', 'w3_det']
+        unfrozen_parameters = ['w1_det', 'w2_det', 'ffn_ln_det', 'w3_det']
         all_layers = list(range(12))
         if finetune_layers_num == 0:
             finetune_layers = []
