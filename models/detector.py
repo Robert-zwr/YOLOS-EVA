@@ -118,7 +118,10 @@ class EVA_Detector(nn.Module):
             else:
                 self.backbone, hidden_dim = eva_small_mim(pretrained=pre_trained)
         elif backbone_name == 'base':
-            self.backbone, hidden_dim = eva_base(pretrained=pre_trained)
+            if use_partial_finetune:
+                self.backbone, hidden_dim = eva_base_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
+            else:
+                self.backbone, hidden_dim = eva_base(pretrained=pre_trained)
         else:
             raise ValueError(f'backbone {backbone_name} not supported')
         
