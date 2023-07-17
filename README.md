@@ -28,6 +28,17 @@ This project applies the YOLOS method to EVA-02 models and evaluates their perfo
 - For EVA models, We interpolate the kernel size of `patch_embed` from `14x14` to `16x16`. This is useful for object detection, instance segmentation & semantic segmentation tasks.
 - The comparison of these results may not be fair, as the EVA model uses more data during the pre-training process(IN-21K).
 
+## Partial finetune results
+
++ Tiny models
+
+|Model |Params(adjustable) |  Init Weight| Use partial finetune | Fully adjustable layers | Log | AP @ VOC2007 test |
+| :------------: | :------------: | :------------: | :------------: | :------------: | :------------: | :------------: |
+|`VOC-YOLOS-Ti`|6M|[DeiT-tiny](https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth)|×|12| [Log](https://gist.github.com/Robert-zwr/c011a5b0ba5fc71e6f09abdf8cc84efc)|23.9
+|`VOC-YOLOS-EVA-Ti`|6M|[EVA02-tiny](https://huggingface.co/Yuxin-CV/EVA-02/blob/main/eva02/cls/in1k/eva02_Ti_pt_in21k_ft_in1k_p14.pt)|×|12| [Log](https://gist.github.com/Robert-zwr/32ae183c4fd07244f3f7b58ee8c39903) |31.9
+|`VOC-YOLOS-Ti`|3.7M|[DeiT-tiny](https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth)|√|0| [Log](https://gist.github.com/Robert-zwr/319519eacb981148cfc9441857926844)|9.4
+|`VOC-YOLOS-EVA-Ti`|6M|[EVA02-tiny](https://huggingface.co/Yuxin-CV/EVA-02/blob/main/eva02/cls/in1k/eva02_Ti_pt_in21k_ft_in1k_p14.pt)|×|12| [Log](https://gist.github.com/Robert-zwr/32ae183c4fd07244f3f7b58ee8c39903) |31.9
+
 ## Requirement
 
 Please reference to Requirement of YOLOS [here](https://github.com/hustvl/YOLOS#requirement) to build the environment.

@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
-# os.environ['CUDA_VISIBLE_DEVICES']='1,2,3'
+os.environ['CUDA_VISIBLE_DEVICES']='1,2,3'
 
 import datasets
 import util.misc as utils
@@ -73,6 +73,8 @@ def get_args_parser():
                         help="Number of last layers to finetune")
     parser.add_argument('--patch_size', default=16, type=int,
                         help="patch size for yolos")
+    parser.add_argument('--partial_finetune_type', default='ffn', type=str,
+                        help="Name of the model's finetune part (attn/ffn)")
     parser.add_argument('--pre_trained', default='',
                         help="set imagenet pretrained model path if not train yolos from scatch")
     parser.add_argument('--init_pe_size', nargs='+', type=int,

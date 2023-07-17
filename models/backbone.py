@@ -1239,6 +1239,55 @@ def eva_small_mim_partial_finetune(pretrained=None, finetune_layers_num=0, **kwa
     return model, 384
 
 
+def eva_small_mim_partial_finetune_attn(pretrained=None, finetune_layers_num=0, **kwargs):
+    model = EVAVisionTransformer(
+        img_size=224, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=2.6667, qkv_bias=True,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6), use_mean_pooling=False, xattn=True, intp_freq=True, pt_hw_seq_len=16, 
+        naiveswiglu=True, rope=True, **kwargs)
+    if pretrained:
+        checkpoint = torch.load(pretrained, map_location="cpu")["module"]
+        for k in list(checkpoint.keys()):
+            if 'rope' in k:
+                del checkpoint[k]
+        checkpoint['patch_embed.proj.weight'] = nn.functional.interpolate(checkpoint['patch_embed.proj.weight'], size=(16,16), mode='bicubic', align_corners=False)
+        #checkpoint['pos_embed'] = nn.functional.interpolate(checkpoint['pos_embed'], size=(16,16), mode='bicubic', align_corners=False)
+        pos_embed = checkpoint['pos_embed'][:,1:,:].transpose(1,2).reshape(1, 384, 16, 16)
+        cls_pos_embed = checkpoint['pos_embed'][:,0,:]
+        pos_embed = nn.functional.interpolate(pos_embed, size=(14,14), mode='bicubic', align_corners=False)
+        pos_embed = pos_embed.reshape(1, 384, 14*14).transpose(1,2)
+        checkpoint['pos_embed'] = torch.cat([cls_pos_embed.unsqueeze(0), pos_embed], dim=1) #torch.Size([1, 197, 384])
+        for k in range(12):
+            checkpoint['blocks.%d.mlp.w1.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][:1024]
+            checkpoint['blocks.%d.mlp.w1.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][:1024]
+            checkpoint['blocks.%d.mlp.w2.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][1024:]
+            checkpoint['blocks.%d.mlp.w2.bias'%k] = checkpoint['blocks.%d.mlp.w12.bias'%k][1024:]
+            del checkpoint['blocks.%d.mlp.w12.weight'%k], checkpoint['blocks.%d.mlp.w12.bias'%k]
+
+        model.load_state_dict(checkpoint, strict=False)
+
+        unfrozen_parameters = ['attn']
+        all_layers = list(range(12))
+        if finetune_layers_num == 0:
+            finetune_layers = []
+        elif finetune_layers_num > 12:
+            finetune_layers = all_layers
+        else:
+            finetune_layers = all_layers[-finetune_layers_num:]
+        for name, param in model.named_parameters():                            
+            for unfrozen_param in unfrozen_parameters:
+                if unfrozen_param in name:
+                    param.requires_grad = True
+                    break
+                else:
+                    param.requires_grad = False
+            
+            for finetune_layer in finetune_layers:
+                if 'blocks.%d'%finetune_layer in name:
+                    param.requires_grad = True
+                    break
+    return model, 384
+
+
 def eva_small_mim_patch14_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
     model = EVAVisionTransformer(
         img_size=224, patch_size=14, embed_dim=384, depth=12, num_heads=6, mlp_ratio=2.6667, qkv_bias=True,
