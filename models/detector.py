@@ -116,6 +116,8 @@ class EVA_Detector(nn.Module):
                         self.backbone, hidden_dim = eva_small_mim_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     elif partial_finetune_type == 'attn':
                         self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
+                    elif partial_finetune_type == 'both':
+                        self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn_ffn(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     else:
                         raise ValueError(f'partial_finetune_type {partial_finetune_type} not supported')
                 elif patch_size == 14:

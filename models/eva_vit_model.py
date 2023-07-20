@@ -363,6 +363,148 @@ class Attention(nn.Module):
             x = self.proj(x)
             x = self.proj_drop(x)
         return x
+    
+class Attention_sep(nn.Module):
+    def __init__(
+            self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.,proj_drop=0., window_size=None, 
+            attn_head_dim=None, xattn=False, rope=None, subln=False, norm_layer=nn.LayerNorm, num_det_tokens=100):
+        super().__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.num_det_tokens = num_det_tokens
+        if attn_head_dim is not None:
+            head_dim = attn_head_dim
+        all_head_dim = head_dim * self.num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+
+        self.subln = subln
+        if self.subln:
+            self.q_proj_patch = nn.Linear(dim, all_head_dim, bias=False)
+            self.k_proj_patch = nn.Linear(dim, all_head_dim, bias=False)
+            self.v_proj_patch = nn.Linear(dim, all_head_dim, bias=False)
+            self.q_proj_det = nn.Linear(dim, all_head_dim, bias=False)
+            self.k_proj_det = nn.Linear(dim, all_head_dim, bias=False)
+            self.v_proj_det = nn.Linear(dim, all_head_dim, bias=False)
+        else:
+            self.qkv_patch = nn.Linear(dim, all_head_dim * 3, bias=False)
+            self.qkv_det = nn.Linear(dim, all_head_dim * 3, bias=False)
+
+        if qkv_bias:
+            self.q_bias_patch = nn.Parameter(torch.zeros(all_head_dim))
+            self.v_bias_patch = nn.Parameter(torch.zeros(all_head_dim))
+            self.q_bias_det = nn.Parameter(torch.zeros(all_head_dim))
+            self.v_bias_det = nn.Parameter(torch.zeros(all_head_dim))
+        else:
+            self.q_bias_patch = None
+            self.v_bias_patch = None
+            self.q_bias_det = None
+            self.v_bias_det = None
+
+        if window_size:
+            raise NotImplementedError
+        else:
+            self.window_size = None
+            self.relative_position_bias_table = None
+            self.relative_position_index = None
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.inner_attn_ln = norm_layer(all_head_dim) if subln else nn.Identity()
+        # self.proj = nn.Linear(all_head_dim, all_head_dim)
+        self.proj_patch = nn.Linear(all_head_dim, dim)
+        self.proj_det = nn.Linear(all_head_dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+        self.xattn = xattn
+        self.xattn_drop = attn_drop
+
+        self.rope = rope
+
+    def forward(self, x, rel_pos_bias=None, attn_mask=None):
+        B, N, C = x.shape
+        if self.subln: 
+            q_patch = F.linear(input=x[:,:-self.num_det_tokens,:], weight=self.q_proj_patch.weight, bias=self.q_bias_patch)
+            k_patch = F.linear(input=x[:,:-self.num_det_tokens,:], weight=self.k_proj_patch.weight, bias=None)
+            v_patch = F.linear(input=x[:,:-self.num_det_tokens,:], weight=self.v_proj_patch.weight, bias=self.v_bias_patch)
+
+            q_det = F.linear(input=x[:,-self.num_det_tokens:,:], weight=self.q_proj_det.weight, bias=self.q_bias_det)
+            k_det = F.linear(input=x[:,-self.num_det_tokens:,:], weight=self.k_proj_det.weight, bias=None)
+            v_det = F.linear(input=x[:,-self.num_det_tokens:,:], weight=self.v_proj_det.weight, bias=self.v_bias_det)
+
+            q = torch.cat((q_patch, q_det), dim=1)
+            k = torch.cat((k_patch, k_det), dim=1)
+            v = torch.cat((v_patch, v_det), dim=1)
+
+            q = q.reshape(B, N, self.num_heads, -1).permute(0, 2, 1, 3)     # B, num_heads, N, C
+            k = k.reshape(B, N, self.num_heads, -1).permute(0, 2, 1, 3)  
+            v = v.reshape(B, N, self.num_heads, -1).permute(0, 2, 1, 3) 
+        else: 
+            qkv_bias_patch = None
+            qkv_bias_det = None
+            if self.q_bias_patch is not None:
+                qkv_bias_patch = torch.cat((self.q_bias_patch, torch.zeros_like(self.v_bias_patch, requires_grad=False), self.v_bias_patch))
+            if self.q_bias_det is not None:
+                qkv_bias_det = torch.cat((self.q_bias_det, torch.zeros_like(self.v_bias_det, requires_grad=False), self.v_bias_det))
+            
+            qkv_patch = F.linear(input=x[:,:-self.num_det_tokens,:], weight=self.qkv_patch.weight, bias=qkv_bias_patch)
+            qkv_det = F.linear(input=x[:,-self.num_det_tokens:,:], weight=self.qkv_det.weight, bias=qkv_bias_det)
+            qkv = torch.cat((qkv_patch, qkv_det), dim=1)
+            qkv = qkv.reshape(B, N, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)   # 3, B, num_heads, N, C
+            q, k, v = qkv[0], qkv[1], qkv[2]
+
+        if self.rope:
+            # slightly fast impl
+            q_t = q[:, :, 1:-self.num_det_tokens, :]
+            ro_q_t = self.rope(q_t)
+            q = torch.cat((q[:, :, :1, :], ro_q_t, q[:, :, -self.num_det_tokens:, :]), -2).type_as(v)
+
+            k_t = k[:, :, 1:-self.num_det_tokens, :]
+            ro_k_t = self.rope(k_t)
+            k = torch.cat((k[:, :, :1, :], ro_k_t, k[:, :, -self.num_det_tokens:, :]), -2).type_as(v)
+
+        if self.xattn:
+            #q = q.permute(0, 2, 1, 3)   # B, num_heads, N, C -> B, N, num_heads, C
+            #k = k.permute(0, 2, 1, 3)
+            #v = v.permute(0, 2, 1, 3)
+
+            #x = xops.memory_efficient_attention(
+            #    q, k, v,
+            #    p=self.xattn_drop,
+            #    scale=self.scale,
+            #    )
+            x = memory_efficient_attention_pytorch(q, k, v, p=self.xattn_drop, scale=self.scale, attn_mask=attn_mask)
+
+            x = x.reshape(B, N, -1)
+            x = self.inner_attn_ln(x)
+            x_patch = self.proj_patch(x[:,:-self.num_det_tokens,:])
+            x_det = self.proj_det(x[:,-self.num_det_tokens:,:])
+            x = torch.cat((x_patch, x_det), dim=1)
+            x = self.proj_drop(x)
+        else:
+            q = q * self.scale
+            attn = (q @ k.transpose(-2, -1))
+
+            if self.relative_position_bias_table is not None:
+                relative_position_bias = \
+                    self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
+                        self.window_size[0] * self.window_size[1] + 1,
+                        self.window_size[0] * self.window_size[1] + 1, -1)  # Wh*Ww,Wh*Ww,nH
+                relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+                attn = attn + relative_position_bias.unsqueeze(0).type_as(attn)
+
+            if rel_pos_bias is not None:
+                attn = attn + rel_pos_bias.type_as(attn)
+
+            if attn_mask is not None:
+                attn_mask = attn_mask.bool()
+                attn = attn.masked_fill(~attn_mask[:, None, None, :], float("-inf"))
+            
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+
+            x = (attn @ v).transpose(1, 2).reshape(B, N, -1)
+            x = self.inner_attn_ln(x)
+            x = self.proj(x)
+            x = self.proj_drop(x)
+        return x
 
 
 class Block(nn.Module):
@@ -370,13 +512,19 @@ class Block(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
                  drop_path=0., init_values=None, act_layer=nn.GELU, norm_layer=nn.LayerNorm,
                  window_size=None, attn_head_dim=None, xattn=False, rope=None, postnorm=False,
-                 subln=False, naiveswiglu=False, num_det_tokens=100, partial_finetune=False):
+                 subln=False, naiveswiglu=False, num_det_tokens=100, partial_finetune=False, partial_finetune_attn=False):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
-            attn_drop=attn_drop, proj_drop=drop, window_size=window_size, attn_head_dim=attn_head_dim,
-            xattn=xattn, rope=rope, subln=subln, norm_layer=norm_layer, num_det_tokens=num_det_tokens)
+        if partial_finetune_attn:
+            self.attn = Attention_sep(
+                dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                attn_drop=attn_drop, proj_drop=drop, window_size=window_size, attn_head_dim=attn_head_dim,
+                xattn=xattn, rope=rope, subln=subln, norm_layer=norm_layer, num_det_tokens=num_det_tokens)
+        else:
+            self.attn = Attention(
+                dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                attn_drop=attn_drop, proj_drop=drop, window_size=window_size, attn_head_dim=attn_head_dim,
+                xattn=xattn, rope=rope, subln=subln, norm_layer=norm_layer, num_det_tokens=num_det_tokens)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
@@ -498,11 +646,11 @@ class EVAVisionTransformer(nn.Module):
     """ Vision Transformer with support for patch or hybrid CNN input stage
     """
     def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, num_det_tokens=100, embed_dim=768, depth=12,
-                 num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                 drop_path_rate=0., norm_layer=nn.LayerNorm, init_values=None, patch_dropout=0.,
-                 use_abs_pos_emb=True, use_rel_pos_bias=False, use_shared_rel_pos_bias=False, rope=False,
-                 use_mean_pooling=True, init_scale=0.001, grad_checkpointing=False, xattn=False, postnorm=False,
-                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False, attn_mask=False, partial_finetune=False):
+                 num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,drop_path_rate=0., 
+                 norm_layer=nn.LayerNorm, init_values=None, patch_dropout=0.,use_abs_pos_emb=True, use_rel_pos_bias=False, 
+                 use_shared_rel_pos_bias=False, rope=False,use_mean_pooling=True, init_scale=0.001, grad_checkpointing=False, 
+                 xattn=False, postnorm=False,pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False, attn_mask=False, 
+                 partial_finetune=False, partial_finetune_attn=False):
         super().__init__()
         #self.img_size = img_size
         if isinstance(img_size,tuple):
@@ -546,6 +694,7 @@ class EVAVisionTransformer(nn.Module):
 
         self.naiveswiglu = naiveswiglu
         self.partial_finetune = partial_finetune
+        self.partial_finetune_attn = partial_finetune_attn
 
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         self.use_rel_pos_bias = use_rel_pos_bias
@@ -555,7 +704,7 @@ class EVAVisionTransformer(nn.Module):
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
                 init_values=init_values, window_size=self.patch_embed.patch_shape if use_rel_pos_bias else None,
                 xattn=xattn, rope=self.rope, postnorm=postnorm, subln=subln, naiveswiglu=naiveswiglu, 
-                num_det_tokens = self.num_det_tokens, partial_finetune=partial_finetune)
+                num_det_tokens = self.num_det_tokens, partial_finetune=partial_finetune, partial_finetune_attn = partial_finetune_attn)
             for i in range(depth)])
         self.norm = nn.Identity() if use_mean_pooling else norm_layer(embed_dim)
         self.fc_norm = norm_layer(embed_dim) if use_mean_pooling else None
@@ -588,7 +737,11 @@ class EVAVisionTransformer(nn.Module):
             param.div_(math.sqrt(2.0 * layer_id))
 
         for layer_id, layer in enumerate(self.blocks):
-            rescale(layer.attn.proj.weight.data, layer_id + 1)
+            if self.partial_finetune_attn:
+                rescale(layer.attn.proj_patch.weight.data, layer_id + 1)
+                rescale(layer.attn.proj_det.weight.data, layer_id + 1)
+            else:
+                rescale(layer.attn.proj.weight.data, layer_id + 1)
             if self.naiveswiglu:
                 if self.partial_finetune:
                     rescale(layer.mlp.w3_patch.weight.data, layer_id + 1)
