@@ -32,7 +32,7 @@ This project applies the YOLOS method to EVA-02 models and evaluates their perfo
 
 + Tiny models
 
-|Model |Params(adjustable) |  Init Weight| finetune type | Fully adjustable layers | Log | AP @ VOC2007 test |
+|Model |Params (adjustable) |  Init Weight| finetune type | Fully adjustable layers | Log | AP @ VOC2007 test |
 | :------------: | :------------: | :------------: | :------------: | :------------: | :------------: | :------------: |
 |`VOC-YOLOS-Ti`|6M|[DeiT-tiny](https://dl.fbaipublicfiles.com/deit/deit_tiny_patch16_224-a1311bcf.pth)|full|12| [Log](https://gist.github.com/Robert-zwr/c011a5b0ba5fc71e6f09abdf8cc84efc)|23.9
 |`VOC-YOLOS-EVA-Ti`|6M|[eva02_Ti_pt_in21k_ft_in1k_p14](https://huggingface.co/Yuxin-CV/EVA-02/blob/main/eva02/cls/in1k/eva02_Ti_pt_in21k_ft_in1k_p14.pt)|full|12| [Log](https://gist.github.com/Robert-zwr/32ae183c4fd07244f3f7b58ee8c39903) |31.9
@@ -44,7 +44,7 @@ This project applies the YOLOS method to EVA-02 models and evaluates their perfo
 
 + Small models
 
-|Model |Params(adjustable) |  Init Weight| finetune type | Fully adjustable layers | Log | AP @ VOC2007 test |
+|Model |Params (adjustable) |  Init Weight| finetune type | Fully adjustable layers | Log | AP @ VOC2007 test |
 | :------------: | :------------: | :------------: | :------------: | :------------: | :------------: | :------------: |
 |`VOC-YOLOS-S`|23M|[DeiT-small](https://dl.fbaipublicfiles.com/deit/deit_small_patch16_224-cd65a155.pth)|full|12| [Log](https://gist.github.com/Robert-zwr/3a12a61886b53c3e51e47bb1d00b0d53)|31.1
 |`VOC-YOLOS-EVA-S`|23M|[eva02_S_pt_in21k_ft_in1k_p14](https://huggingface.co/Yuxin-CV/EVA-02/blob/main/eva02/cls/in1k/eva02_S_pt_in21k_ft_in1k_p14.pt)|full|12| [Log](https://gist.github.com/Robert-zwr/87b0f14c966a57a64962bf81631e7b66)|42.0
@@ -58,6 +58,9 @@ This project applies the YOLOS method to EVA-02 models and evaluates their perfo
 |`VOC-YOLOS-EVA-S-3`|20M|[eva02_S_pt_in21k_ft_in1k_p14](https://huggingface.co/Yuxin-CV/EVA-02/blob/main/eva02/cls/in1k/eva02_S_pt_in21k_ft_in1k_p14.pt)|ffn|3| [Log](https://gist.github.com/Robert-zwr/798f8f06413cc188bea12a2477036a53) |32.6
 |`VOC-YOLOS-EVA-S-MIM-3`|20M|[eva02_S_pt_in21k_p14](https://huggingface.co/Yuxin-CV/EVA-02/resolve/main/eva02/pt/eva02_S_pt_in21k_p14.pt)|ffn|3| [Log](https://gist.github.com/Robert-zwr/6543bdb46bc1df515111bfe1aba5192d) |35.4
 |`VOC-YOLOS-EVA-S-attn-0`|8M|[eva02_S_pt_in21k_p14](https://huggingface.co/Yuxin-CV/EVA-02/resolve/main/eva02/pt/eva02_S_pt_in21k_p14.pt)|attn|0| [checkpoint](https://huggingface.co/Robert-zwr/EVA-YOLOS/blob/main/checkpoints/VOC-YOLOS-EVA-S-attn-0.pth) / [Log](https://gist.github.com/Robert-zwr/496a5c3fa09ffb21c3724f73567bbe60) |42.4
+
+**Explanations**
++ 
 
 ## Requirement
 

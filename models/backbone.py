@@ -1169,11 +1169,11 @@ def eva_small_patch14_partial_finetune(pretrained=None, finetune_layers_num=0, *
     return model, 384
 
 
-def eva_small_mim_partial_finetune(pretrained=None, finetune_layers_num=0, **kwargs):
+def eva_small_mim_partial_finetune(pretrained=None, finetune_layers_num=0, add_attn_mask=False, **kwargs):
     model = EVAVisionTransformer(
         img_size=224, patch_size=16, embed_dim=384, depth=12, num_heads=6, mlp_ratio=2.6667, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), use_mean_pooling=False, xattn=True, intp_freq=True, pt_hw_seq_len=16, 
-        naiveswiglu=True, rope=True, partial_finetune=True, **kwargs)
+        naiveswiglu=True, rope=True, attn_mask=add_attn_mask, partial_finetune=True, **kwargs)
     if pretrained:
         # checkpoint = torch.load('deit_base_distilled_patch16_384-d0272ac0.pth', map_location="cpu")
         # checkpoint = torch.hub.load_state_dict_from_url(

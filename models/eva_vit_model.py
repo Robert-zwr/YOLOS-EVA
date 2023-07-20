@@ -146,7 +146,7 @@ class SwiGLU(nn.Module):
     
 class SwiGLU_sep(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.SiLU, drop=0., 
-                norm_layer=nn.LayerNorm, subln=False):
+                norm_layer=nn.LayerNorm, subln=False, num_det_tokens=100):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -164,7 +164,7 @@ class SwiGLU_sep(nn.Module):
         
         self.drop = nn.Dropout(drop)
 
-        self.num_det_tokens = 100
+        self.num_det_tokens = num_det_tokens
 
     def forward(self, x):
         x_patch = x[:,:-self.num_det_tokens,:]
@@ -189,7 +189,7 @@ class SwiGLU_sep(nn.Module):
         return x
 
 
-def memory_efficient_attention_pytorch(query, key, value, attn_bias=None, p=0., scale=None):
+def memory_efficient_attention_pytorch(query, key, value, attn_bias=None, p=0., scale=None, attn_mask=None):
     # query     [batch, seq_len, n_head, head_dim]
     # key       [batch, seq_len, n_head, head_dim]
     # value     [batch, seq_len, n_head, head_dim]
@@ -208,6 +208,11 @@ def memory_efficient_attention_pytorch(query, key, value, attn_bias=None, p=0., 
     attn = query @ key.transpose(-2, -1)
     if attn_bias is not None:
         attn = attn + attn_bias
+
+    if attn_mask is not None:
+        attn_mask = attn_mask.bool()
+        attn = attn.masked_fill(~attn_mask, float("-inf"))
+
     attn = attn.softmax(-1)
     attn = F.dropout(attn, p)
     # BHLL @ BHLC -> BHLC
@@ -218,11 +223,12 @@ def memory_efficient_attention_pytorch(query, key, value, attn_bias=None, p=0., 
 
 class Attention(nn.Module):
     def __init__(
-            self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.,
-            proj_drop=0., window_size=None, attn_head_dim=None, xattn=False, rope=None, subln=False, norm_layer=nn.LayerNorm):
+            self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.,proj_drop=0., window_size=None, 
+            attn_head_dim=None, xattn=False, rope=None, subln=False, norm_layer=nn.LayerNorm, num_det_tokens=100):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
+        self.num_det_tokens = num_det_tokens
         if attn_head_dim is not None:
             head_dim = attn_head_dim
         all_head_dim = head_dim * self.num_heads
@@ -305,15 +311,14 @@ class Attention(nn.Module):
             q, k, v = qkv[0], qkv[1], qkv[2]
 
         if self.rope:
-            num_det_tokens = 100
             # slightly fast impl
-            q_t = q[:, :, 1:-num_det_tokens, :]
+            q_t = q[:, :, 1:-self.num_det_tokens, :]
             ro_q_t = self.rope(q_t)
-            q = torch.cat((q[:, :, :1, :], ro_q_t, q[:, :, -num_det_tokens:, :]), -2).type_as(v)
+            q = torch.cat((q[:, :, :1, :], ro_q_t, q[:, :, -self.num_det_tokens:, :]), -2).type_as(v)
 
-            k_t = k[:, :, 1:-num_det_tokens, :]
+            k_t = k[:, :, 1:-self.num_det_tokens, :]
             ro_k_t = self.rope(k_t)
-            k = torch.cat((k[:, :, :1, :], ro_k_t, k[:, :, -num_det_tokens:, :]), -2).type_as(v)
+            k = torch.cat((k[:, :, :1, :], ro_k_t, k[:, :, -self.num_det_tokens:, :]), -2).type_as(v)
 
         if self.xattn:
             #q = q.permute(0, 2, 1, 3)   # B, num_heads, N, C -> B, N, num_heads, C
@@ -325,7 +330,7 @@ class Attention(nn.Module):
             #    p=self.xattn_drop,
             #    scale=self.scale,
             #    )
-            x = memory_efficient_attention_pytorch(q, k, v, p=self.xattn_drop, scale=self.scale)
+            x = memory_efficient_attention_pytorch(q, k, v, p=self.xattn_drop, scale=self.scale, attn_mask=attn_mask)
 
             x = x.reshape(B, N, -1)
             x = self.inner_attn_ln(x)
@@ -365,13 +370,13 @@ class Block(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
                  drop_path=0., init_values=None, act_layer=nn.GELU, norm_layer=nn.LayerNorm,
                  window_size=None, attn_head_dim=None, xattn=False, rope=None, postnorm=False,
-                 subln=False, naiveswiglu=False, partial_finetune=False):
+                 subln=False, naiveswiglu=False, num_det_tokens=100, partial_finetune=False):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
             attn_drop=attn_drop, proj_drop=drop, window_size=window_size, attn_head_dim=attn_head_dim,
-            xattn=xattn, rope=rope, subln=subln, norm_layer=norm_layer)
+            xattn=xattn, rope=rope, subln=subln, norm_layer=norm_layer, num_det_tokens=num_det_tokens)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)
@@ -384,6 +389,7 @@ class Block(nn.Module):
                     hidden_features=mlp_hidden_dim, 
                     subln=subln,
                     norm_layer=norm_layer,
+                    num_det_tokens=num_det_tokens,
                 )
             else:
                 self.mlp = SwiGLU(
@@ -491,12 +497,12 @@ class RelativePositionBias(nn.Module):
 class EVAVisionTransformer(nn.Module):
     """ Vision Transformer with support for patch or hybrid CNN input stage
     """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, num_det_tokens=100, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
                  drop_path_rate=0., norm_layer=nn.LayerNorm, init_values=None, patch_dropout=0.,
                  use_abs_pos_emb=True, use_rel_pos_bias=False, use_shared_rel_pos_bias=False, rope=False,
                  use_mean_pooling=True, init_scale=0.001, grad_checkpointing=False, xattn=False, postnorm=False,
-                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False, partial_finetune=False):
+                 pt_hw_seq_len=16, intp_freq=False, naiveswiglu=False, subln=False, attn_mask=False, partial_finetune=False):
         super().__init__()
         #self.img_size = img_size
         if isinstance(img_size,tuple):
@@ -505,6 +511,8 @@ class EVAVisionTransformer(nn.Module):
             self.img_size = to_2tuple(img_size)
         self.num_classes = num_classes
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
+
+        self.num_det_tokens = num_det_tokens
 
         self.patch_embed = PatchEmbed(
             img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
@@ -546,7 +554,8 @@ class EVAVisionTransformer(nn.Module):
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
                 drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer,
                 init_values=init_values, window_size=self.patch_embed.patch_shape if use_rel_pos_bias else None,
-                xattn=xattn, rope=self.rope, postnorm=postnorm, subln=subln, naiveswiglu=naiveswiglu, partial_finetune=partial_finetune)
+                xattn=xattn, rope=self.rope, postnorm=postnorm, subln=subln, naiveswiglu=naiveswiglu, 
+                num_det_tokens = self.num_det_tokens, partial_finetune=partial_finetune)
             for i in range(depth)])
         self.norm = nn.Identity() if use_mean_pooling else norm_layer(embed_dim)
         self.fc_norm = norm_layer(embed_dim) if use_mean_pooling else None
@@ -571,6 +580,8 @@ class EVAVisionTransformer(nn.Module):
 
         self.grad_checkpointing = grad_checkpointing
         self.has_mid_pe = False
+
+        self.attn_mask = attn_mask
 
     def fix_init_weight(self):
         def rescale(param, layer_id):
@@ -622,7 +633,7 @@ class EVAVisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def finetune_det(self, img_size=[800, 1344], det_token_num=100, mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False):
+    def finetune_det(self, img_size=[800, 1344], mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False):
         # import pdb;pdb.set_trace()
 
         import math
@@ -630,12 +641,12 @@ class EVAVisionTransformer(nn.Module):
         if int(g) - g != 0:
             self.pos_embed = torch.nn.Parameter(self.pos_embed[:, 1:, :])
 
-        self.det_token_num = det_token_num
-        self.det_token = nn.Parameter(torch.zeros(1, det_token_num, self.embed_dim))
+        # self.det_token_num = det_token_num
+        self.det_token = nn.Parameter(torch.zeros(1, self.num_det_tokens, self.embed_dim))
         self.det_token = trunc_normal_(self.det_token, std=.02)
         cls_pos_embed = self.pos_embed[:, 0, :]
         cls_pos_embed = cls_pos_embed[:,None]
-        det_pos_embed = torch.zeros(1, det_token_num, self.embed_dim)
+        det_pos_embed = torch.zeros(1, self.num_det_tokens, self.embed_dim)
         det_pos_embed = trunc_normal_(det_pos_embed, std=.02)
         patch_pos_embed = self.pos_embed[:, 1:, :]
         patch_pos_embed = patch_pos_embed.transpose(1,2)
@@ -664,7 +675,7 @@ class EVAVisionTransformer(nn.Module):
             print('No mid pe')
         else:
             print('Has mid pe')
-            self.mid_pos_embed = nn.Parameter(torch.zeros(self.depth - 1, 1, 1 + (mid_pe_size[0] * mid_pe_size[1] // self.patch_size ** 2) + 100, self.embed_dim))
+            self.mid_pos_embed = nn.Parameter(torch.zeros(self.depth - 1, 1, 1 + (mid_pe_size[0] * mid_pe_size[1] // self.patch_size ** 2) + self.num_det_tokens, self.embed_dim))
             trunc_normal_(self.mid_pos_embed, std=.02)
             self.has_mid_pe = True
             self.mid_pe_size = mid_pe_size
@@ -676,7 +687,6 @@ class EVAVisionTransformer(nn.Module):
 
         cls_pos_embed = pos_embed[:, 0, :]
         cls_pos_embed = cls_pos_embed[:,None]
-        # det_pos_embed = pos_embed[:, -self.det_token_num:,:]
         patch_pos_embed = pos_embed[:, 1:, :] # [1,4200,768]
         patch_pos_embed = patch_pos_embed.transpose(1,2)
         freqs_cos = self.freqs_cos.transpose(0,1)
@@ -704,6 +714,14 @@ class EVAVisionTransformer(nn.Module):
         self.rope.freqs_sin = freqs_sin.squeeze().flatten(1).transpose(0,1)
         
         return scale_pos_embed
+    
+    def get_rect_mask(self, patch_seq_len=196):
+
+        total_seq_len = 1 + patch_seq_len + self.num_det_tokens
+        mask = torch.ones(size=[total_seq_len, total_seq_len], device='cuda')
+        mask[:-self.num_det_tokens, -self.num_det_tokens:] = 0
+
+        return mask
     
     def forward_features(self, x, return_all_features=False):
         
@@ -739,19 +757,19 @@ class EVAVisionTransformer(nn.Module):
             x = self.patch_dropout(x)
 
         rel_pos_bias = self.rel_pos_bias() if self.rel_pos_bias is not None else None  # None
-        # np.savetxt('tensor.csv',x[0].cpu().detach().numpy(),fmt='%.4f',delimiter=',')
+        attn_mask = self.get_rect_mask(patch_seq_len=seq_len) if self.attn_mask else None
         for blk in self.blocks:
             if self.grad_checkpointing:
-                x = checkpoint(blk, x, (rel_pos_bias,))
+                x = checkpoint(blk, x, (rel_pos_bias, attn_mask))
             else:
-                x = blk(x, rel_pos_bias=rel_pos_bias)
+                x = blk(x, rel_pos_bias=rel_pos_bias, attn_mask=attn_mask)
 
         if not return_all_features:  # x:[B, 1+n_patch+100, embed_dim=768]
             x = self.norm(x)
             if self.fc_norm is not None:
                 return self.fc_norm(x.mean(1))
             else:
-                return x[:, -self.det_token_num:, :]  # torch.Size([1, 100, 768])
+                return x[:, -self.num_det_tokens:, :]  # torch.Size([1, 100, 768])
         return x
 
     def forward(self, x, return_all_features=False):

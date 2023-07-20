@@ -74,7 +74,9 @@ class Detector(nn.Module):
         return attention
     
 class EVA_Detector(nn.Module):
-    def __init__(self, num_classes, pre_trained=None, det_token_num=100, backbone_name='base', init_pe_size=[800,1344], mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False, finetune_layers_num=0, patch_size=16, partial_finetune_type='ffn'):
+    def __init__(self, num_classes, pre_trained=None, det_token_num=100, backbone_name='base', init_pe_size=[800,1344], 
+                 mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False, finetune_layers_num=0, patch_size=16, 
+                 partial_finetune_type='ffn', add_attn_mask=False):
         super().__init__()
 
         if backbone_name == 'tiny':
@@ -111,7 +113,7 @@ class EVA_Detector(nn.Module):
             if use_partial_finetune:
                 if patch_size == 16:
                     if partial_finetune_type == 'ffn':
-                        self.backbone, hidden_dim = eva_small_mim_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
+                        self.backbone, hidden_dim = eva_small_mim_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     elif partial_finetune_type == 'attn':
                         self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
                     else:
@@ -130,7 +132,7 @@ class EVA_Detector(nn.Module):
         else:
             raise ValueError(f'backbone {backbone_name} not supported')
         
-        self.backbone.finetune_det(det_token_num=det_token_num, img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint, use_partial_finetune=use_partial_finetune)
+        self.backbone.finetune_det(img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint, use_partial_finetune=use_partial_finetune)
         
         self.class_embed = MLP(hidden_dim, hidden_dim, num_classes + 1, 3)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
@@ -401,6 +403,7 @@ def build(args):
             finetune_layers_num = args.finetune_layers_num,
             patch_size=args.patch_size,
             partial_finetune_type = args.partial_finetune_type,
+            add_attn_mask = args.add_attn_mask,
         )
     else:
         raise ValueError(f'model {args.model_name} not supported')
