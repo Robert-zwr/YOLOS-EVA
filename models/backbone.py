@@ -1313,12 +1313,23 @@ def eva_small_mim_partial_finetune_attn_ffn(pretrained=None, finetune_layers_num
         for k in range(12):
             checkpoint['blocks.%d.attn.qkv_patch.weight'%k] = checkpoint['blocks.%d.attn.qkv.weight'%k]
             checkpoint['blocks.%d.attn.qkv_det.weight'%k] = checkpoint['blocks.%d.attn.qkv.weight'%k]
+            del checkpoint['blocks.%d.attn.qkv.weight'%k]
+
+            checkpoint['blocks.%d.attn.q_bias_patch'%k] = checkpoint['blocks.%d.attn.q_bias'%k]
+            checkpoint['blocks.%d.attn.q_bias_det'%k] = checkpoint['blocks.%d.attn.q_bias'%k]
+            del checkpoint['blocks.%d.attn.q_bias'%k]
+
+            checkpoint['blocks.%d.attn.v_bias_patch'%k] = checkpoint['blocks.%d.attn.v_bias'%k]
+            checkpoint['blocks.%d.attn.v_bias_det'%k] = checkpoint['blocks.%d.attn.v_bias'%k]
+            del checkpoint['blocks.%d.attn.v_bias'%k]
 
             checkpoint['blocks.%d.attn.proj_patch.weight'%k] = checkpoint['blocks.%d.attn.proj.weight'%k]
             checkpoint['blocks.%d.attn.proj_det.weight'%k] = checkpoint['blocks.%d.attn.proj.weight'%k]
+            del checkpoint['blocks.%d.attn.proj.weight'%k]
 
             checkpoint['blocks.%d.attn.proj_patch.bias'%k] = checkpoint['blocks.%d.attn.proj.bias'%k]
             checkpoint['blocks.%d.attn.proj_det.bias'%k] = checkpoint['blocks.%d.attn.proj.bias'%k]
+            del checkpoint['blocks.%d.attn.proj.bias'%k]
 
             checkpoint['blocks.%d.mlp.w1_patch.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][:1024]
             checkpoint['blocks.%d.mlp.w1_det.weight'%k] = checkpoint['blocks.%d.mlp.w12.weight'%k][:1024]
@@ -1344,7 +1355,7 @@ def eva_small_mim_partial_finetune_attn_ffn(pretrained=None, finetune_layers_num
 
         model.load_state_dict(checkpoint, strict=False)
 
-        unfrozen_parameters = ['qkv_det', 'proj_det', 'w1_det', 'w2_det', 'w3_det']
+        unfrozen_parameters = ['qkv_det', 'bias_det', 'proj_det', 'w1_det', 'w2_det', 'w3_det']
         all_layers = list(range(12))
         if finetune_layers_num == 0:
             finetune_layers = []
