@@ -116,6 +116,8 @@ class EVA_Detector(nn.Module):
                         self.backbone, hidden_dim = eva_small_mim_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     elif partial_finetune_type == 'attn':
                         self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
+                    elif partial_finetune_type == 'attn_sep':
+                        self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn_sep(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
                     elif partial_finetune_type == 'both':
                         self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn_ffn(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     else:
@@ -134,7 +136,7 @@ class EVA_Detector(nn.Module):
         else:
             raise ValueError(f'backbone {backbone_name} not supported')
         
-        self.backbone.finetune_det(img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint, use_partial_finetune=use_partial_finetune)
+        self.backbone.finetune_det(img_size=init_pe_size, mid_pe_size=mid_pe_size, use_checkpoint=use_checkpoint)
         
         self.class_embed = MLP(hidden_dim, hidden_dim, num_classes + 1, 3)
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)

@@ -74,7 +74,7 @@ def get_args_parser():
     parser.add_argument('--patch_size', default=16, type=int,
                         help="patch size for yolos")
     parser.add_argument('--partial_finetune_type', default='ffn', type=str,
-                        help="Name of the model's finetune part (attn/ffn/both)")
+                        help="Name of the model's finetune part (attn/attn_sep/ffn/both)")
     parser.add_argument('--add_attn_mask', action='store_true', default=False,
                         help="whether to add mask in attn layers")
     parser.add_argument('--pre_trained', default='',

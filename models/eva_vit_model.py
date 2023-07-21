@@ -786,7 +786,7 @@ class EVAVisionTransformer(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def finetune_det(self, img_size=[800, 1344], mid_pe_size=None, use_checkpoint=False, use_partial_finetune=False):
+    def finetune_det(self, img_size=[800, 1344], mid_pe_size=None, use_checkpoint=False):
         # import pdb;pdb.set_trace()
 
         import math
@@ -811,7 +811,7 @@ class EVAVisionTransformer(nn.Module):
         # torch.Size([1, 768, 50, 84])
         patch_pos_embed = nn.functional.interpolate(patch_pos_embed, size=(new_P_H,new_P_W), mode='bicubic', align_corners=False)
         patch_pos_embed = patch_pos_embed.flatten(2).transpose(1,2) # torch.Size([1, 4200, 768])
-        self.pos_embed = torch.nn.Parameter(torch.cat((cls_pos_embed, patch_pos_embed), dim=1), requires_grad=not use_partial_finetune)
+        self.pos_embed = torch.nn.Parameter(torch.cat((cls_pos_embed, patch_pos_embed), dim=1), requires_grad=not (self.partial_finetune or self.partial_finetune_attn))
         self.det_pos_embed = torch.nn.Parameter(det_pos_embed)
 
         _, head_dim = self.rope.freqs_cos.shape
