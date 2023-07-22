@@ -115,9 +115,9 @@ class EVA_Detector(nn.Module):
                     if partial_finetune_type == 'ffn':
                         self.backbone, hidden_dim = eva_small_mim_partial_finetune(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     elif partial_finetune_type == 'attn':
-                        self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
+                        self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     elif partial_finetune_type == 'attn_sep':
-                        self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn_sep(pretrained=pre_trained, finetune_layers_num=finetune_layers_num)
+                        self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn_sep(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     elif partial_finetune_type == 'both':
                         self.backbone, hidden_dim = eva_small_mim_partial_finetune_attn_ffn(pretrained=pre_trained, finetune_layers_num=finetune_layers_num, add_attn_mask=add_attn_mask)
                     else:
